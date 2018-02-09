@@ -8,9 +8,9 @@ dec2hex() {
 
 exec_remote_cmd() {
 	local remote=$1
-	local dir=$2
+	local cmd=$2
 	shift 2
-	ssh $USER_ID@$remote "$dir/$0 $@"
+	ssh $USER_ID@$remote "$cmd $@"
 }
 
 get_list_depth() {
@@ -42,9 +42,20 @@ check_default() {
 }
 
 check_operation() {
-	# $1: port to check
-	ovn-nbctl get Logical_Switch_Port "$1" up >/dev/null 2>&1
-	echo $?
+	# $1: operation
+	# $2: port to check
+	# $3: remove device (optional)
+	case $1 in
+		ADD)
+			ovn-nbctl get Logical_Switch_Port "$2" up >/dev/null 2>&1
+			echo $?
+			;;
+		REMOVE)
+			exec_remote_cmd $3 ovs-vsctl "find Interface name=$2" | grep $2
+			echo $?
+			;;
+		*) echo -1 ;;
+	esac
 }
 
 usage() {
@@ -147,7 +158,7 @@ configure_ovn_ctrl_list() {
 	# configure remote ovn-controller
 	local ctrl_idx=1
 	for dev in $CONTROLLER_IP_LIST; do
-		exec_remote_cmd $dev $DIR configure_ovn_ctrl \
+		exec_remote_cmd $dev $DIR/ovn-test-scale.sh configure_ovn_ctrl \
 				$ctrl_idx $NUM_POD_CTRL $dev $CENTRAL_IP \
 				$LOGICAL_SWITCH $LOGICAL_PORT
 
@@ -236,9 +247,6 @@ add_remove_port() {
 
 	port=$(fgrep -r sw${i}pod $WORKSPACE/ | cut -d 'd' -f 2 | sort -rn | head -n 1)
 
-	# if port is not there we must add it
-	# [ "$port" = "" ] && var=-1
-
 	if [ $var -lt 0 ]; then
 		local limit=$((RANDOM%(NUM_CTRL+1)))
 		local idx=1
@@ -256,28 +264,21 @@ add_remove_port() {
 		done
 	fi
 
-	local old_state
-	local new_state
-
 	if [ $var -lt 0 ]; then
 		local MAC=00:$(dec2hex $((i/254))):$(dec2hex $((i%254))):00:$(dec2hex $((port/254))):$(dec2hex $((port%254)))
 		local IP=$((1+i/254)).$((i%254)).$((port/254)).$((port%254))
 
 		echo -ne "Adding port $port on controller $dev ns\t\t\t[sw${i}pod$port].."
-		old_state=$(check_operation sw$i-port$port)
 		ovn-nbctl lsp-add sw$i sw$i-port$port
 		ovn-nbctl lsp-set-addresses sw$i-port$port "$MAC $IP"
-		exec_remote_cmd $dev $DIR create_fake_vm $i $port
-		new_state=$(check_operation sw$i-port$port)
-		[ $old_state -eq 1 -a $new_state -eq 0 ] && echo "ok" || echo "failed"
+		exec_remote_cmd $dev $DIR/ovn-test-scale.sh create_fake_vm $i $port
+		[ $(check_operation ADD sw$i-port$port) -eq 0 ] && echo "ok" || echo "failed"
 		echo sw${i}pod$port >> $WORKSPACE/$dev
 	else
 		echo -ne "Removing port $port on controller $dev ns\t\t[sw${i}pod$port].."
-		old_state=$(check_operation sw$i-port$port)
 		ovn-nbctl lsp-del sw$i-port$port
-		exec_remote_cmd $dev $DIR remove_fake_vm $i $port
-		new_state=$(check_operation sw$i-port$port)
-		[ $old_state -eq 0 -a $new_state -eq 1 ] && echo "ok" || echo "failed"
+		exec_remote_cmd $dev $DIR/ovn-test-scale.sh remove_fake_vm $i $port
+		[ $(check_operation REMOVE sw$i-port$port $dev) -eq 1 ] && echo "ok" || echo "failed"
 		sed "/sw${i}pod$port/d" -i $WORKSPACE/$dev
 	fi
 }
