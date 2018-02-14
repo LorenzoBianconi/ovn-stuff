@@ -96,13 +96,12 @@ create_fake_vm() {
 
 	ip netns add sw$1pod$2
 	ovs-vsctl add-port br-int sw$1pod$2 \
-		-- set interface sw$1pod$2 type=internal
+		-- set interface sw$1pod$2 type=internal \
+		-- set Interface sw$1pod$2 external_ids:iface-id=sw$1-port$2
 	ip link set sw$1pod$2 netns sw$1pod$2
 	ip -n sw$1pod$2 link set sw$1pod$2 address $MAC
 	ip -n sw$1pod$2 addr add "$IP/16" dev sw$1pod$2
 	ip -n sw$1pod$2 link set sw$1pod$2 up
-	ovs-vsctl set Interface sw$1pod$2 external_ids:iface-id=sw$1-port$2
-
 	ip -n sw$1pod$2 route add default via $((1+$1/254)).$(($1%254)).254.254
 }
 
@@ -132,13 +131,13 @@ configure_ovn_ctrl() {
 	# clean ovn-controller configuration
 	systemctl restart ovn-controller
 	
-	ovs-vsctl set open_vswitch . system-type=ctrl-$1
-	ovs-vsctl set open_vswitch . external-ids:system-id=ctrl-$1
-	ovs-vsctl set open_vswitch . external-ids:hostname=ctrl-$1
-	ovs-vsctl set open_vswitch . external-ids:ovn-bridge="br-int"
-	ovs-vsctl set open_vswitch . external-ids:ovn-encap-ip=$3
-	ovs-vsctl set open_vswitch . external-ids:ovn-encap-type="geneve"
-	ovs-vsctl set open . external-ids:ovn-remote=tcp:$4:6642
+	ovs-vsctl set open_vswitch . system-type=ctrl-$1 \
+		  -- set open_vswitch . external-ids:system-id=ctrl-$1 \
+		  -- set open_vswitch . external-ids:hostname=ctrl-$1 \
+		  -- set open_vswitch . external-ids:ovn-bridge="br-int" \
+		  -- set open_vswitch . external-ids:ovn-encap-ip=$3 \
+		  -- set open_vswitch . external-ids:ovn-encap-type="geneve" \
+		  -- set open . external-ids:ovn-remote=tcp:$4:6642
 
 	# wait for the bridge to come up
 	until [ -d /sys/class/net/br-int ]; do
