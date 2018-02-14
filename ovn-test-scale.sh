@@ -182,8 +182,8 @@ create_ovn_ls() {
 		local MAC=00:$(dec2hex $(($1/254))):$(dec2hex $(($1%254))):00:$(dec2hex $((port/254))):$(dec2hex $((port%254)))
 		local IP=$((1+$1/254)).$(($1%254)).$((port/254)).$((port%254))
 
-		ovn-nbctl lsp-add sw$1 sw$1-port$port
-		ovn-nbctl lsp-set-addresses sw$1-port$port "$MAC $IP"
+		ovn-nbctl lsp-add sw$1 sw$1-port$port -- \
+			  lsp-set-addresses sw$1-port$port "$MAC $IP"
 	done
 }
 
@@ -193,11 +193,11 @@ create_ovn_lr() {
 		local MAC=00:$(dec2hex $((dev/254))):$(dec2hex $((dev%254))):ff:$(dec2hex $((dev/254))):$(dec2hex $((dev%254)))
 
 		create_ovn_ls $dev
-		ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16
-		ovn-nbctl lsp-add sw$dev sw$dev-portr0
-		ovn-nbctl lsp-set-type sw$dev-portr0 router
-		ovn-nbctl lsp-set-addresses sw$dev-portr0 $MAC
-		ovn-nbctl lsp-set-options sw$dev-portr0 router-port=lrp$dev
+		ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16 -- \
+			  lsp-add sw$dev sw$dev-portr0 -- \
+			  lsp-set-type sw$dev-portr0 router -- \
+			  lsp-set-addresses sw$dev-portr0 $MAC -- \
+			  lsp-set-options sw$dev-portr0 router-port=lrp$dev
 	done
 }
 
@@ -269,8 +269,8 @@ add_remove_port() {
 		local IP=$((1+i/254)).$((i%254)).$((port/254)).$((port%254))
 
 		echo -ne "Adding port $port on controller $dev ns\t\t\t[sw${i}pod$port].."
-		ovn-nbctl lsp-add sw$i sw$i-port$port
-		ovn-nbctl lsp-set-addresses sw$i-port$port "$MAC $IP"
+		ovn-nbctl lsp-add sw$i sw$i-port$port -- \
+			  lsp-set-addresses sw$i-port$port "$MAC $IP"
 		exec_remote_cmd $dev $DIR/ovn-test-scale.sh create_fake_vm $i $port
 		[ $(check_operation ADD sw$i-port$port) -eq 0 ] && echo "ok" || echo "failed"
 		echo sw${i}pod$port >> $WORKSPACE/$dev
