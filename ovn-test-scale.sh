@@ -113,6 +113,35 @@ remove_fake_vm() {
 	ovs-vsctl del-port br-int sw$1pod$2
 }
 
+create_ovn_ls_port() {
+	# $1: switch id
+	# $2: port id
+	# $3: mac address
+	# $4: ip address
+
+	ovn-nbctl lsp-add sw$1 sw$1-port$2 \
+		  -- lsp-set-addresses sw$1-port$2 "$3 $4" \
+		  -- acl-add sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && icmp4" allow-related \
+		  -- acl-add sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && tcp && tcp.dst == 22" allow-related \
+		  -- acl-add sw$1 to-lport 1001 "outport == \"sw$1-port$2\" && ip" drop \
+		  -- acl-add sw$1 from-lport 1002 "inport == \"sw$1-port$2\" && ip4 && ip4.dst == {255.255.255.255, 10.1.0.0/16} && udp && udp.src == 68 && udp.dst == 67" allow \
+		  -- acl-add sw$1 from-lport 1002 "inport == \"sw$1-port$2\" && ip" allow-related \
+		  -- acl-add sw$1 from-lport 1001 "inport == \"sw$1-port$2\"" drop
+}
+
+remove_ovn_ls_port() {
+	# $1: switch id
+	# $2: port id
+
+	ovn-nbctl lsp-del sw$1-port$2 \
+		  -- acl-del sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && icmp4" \
+		  -- acl-del sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && tcp && tcp.dst == 22" \
+		  -- acl-del sw$1 to-lport 1001 "outport == \"sw$1-port$2\" && ip" \
+		  -- acl-del sw$1 from-lport 1002 "inport == \"sw$1-port$2\" && ip4 && ip4.dst == {255.255.255.255, 10.1.0.0/16} && udp && udp.src == 68 && udp.dst == 67" \
+		  -- acl-del sw$1 from-lport 1002 "inport == \"sw$1-port$2\" && ip" \
+		  -- acl-del sw$1 from-lport 1001 "inport == \"sw$1-port$2\""
+}
+
 configure_ovn_ctrl() {
 	# $1: controller id
 	# $2: # of port/controller
@@ -181,8 +210,7 @@ create_ovn_ls() {
 		local MAC=00:$(dec2hex $(($1/254))):$(dec2hex $(($1%254))):00:$(dec2hex $((port/254))):$(dec2hex $((port%254)))
 		local IP=$((1+$1/254)).$(($1%254)).$((port/254)).$((port%254))
 
-		ovn-nbctl lsp-add sw$1 sw$1-port$port -- \
-			  lsp-set-addresses sw$1-port$port "$MAC $IP"
+		create_ovn_ls_port $1 $port $MAC $IP
 	done
 }
 
@@ -268,14 +296,13 @@ add_remove_port() {
 		local IP=$((1+i/254)).$((i%254)).$((port/254)).$((port%254))
 
 		echo -ne "Adding port $port on controller $dev ns\t\t\t[sw${i}pod$port].."
-		ovn-nbctl lsp-add sw$i sw$i-port$port -- \
-			  lsp-set-addresses sw$i-port$port "$MAC $IP"
+		create_ovn_ls_port $i $port $MAC $IP
 		exec_remote_cmd $dev $DIR/ovn-test-scale.sh create_fake_vm $i $port
 		[ $(check_operation ADD sw$i-port$port) -eq 0 ] && echo "ok" || echo "failed"
 		echo sw${i}pod$port >> $WORKSPACE/$dev
 	else
 		echo -ne "Removing port $port on controller $dev ns\t\t[sw${i}pod$port].."
-		ovn-nbctl lsp-del sw$i-port$port
+		remove_ovn_ls_port $i $port
 		exec_remote_cmd $dev $DIR/ovn-test-scale.sh remove_fake_vm $i $port
 		[ $(check_operation REMOVE sw$i-port$port $dev) -eq 1 ] && echo "ok" || echo "failed"
 		sed "/sw${i}pod$port/d" -i $WORKSPACE/$dev
