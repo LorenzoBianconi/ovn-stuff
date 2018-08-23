@@ -39,6 +39,8 @@ check_default() {
 	[ -z "$DELAY" ] && DELAY=1
 	[ -z "$N" ] && N=10
 	[ -z "$M" ] && M=0
+	[ -z "$ACL" ] && ACL=0
+	[ -z "$EXT" ] && EXT=0
 }
 
 check_operation() {
@@ -60,7 +62,8 @@ check_operation() {
 
 usage() {
 echo -e "
-Usage: $0 [-PSIDNMiud] <setup|run_test|create_fake_vm|remove_fake_vm|configure_ovn_ctrl|dump|help>
+Usage: $0 [-APSIDNMiude] <setup|run_test|create_fake_vm|remove_fake_vm|configure_ovn_ctrl|dump|help>
+		-A: enable/disable default ACL configuration
 		-P: # of OVN logical port/switch\t(default 30)
 		-S: # of OVN logical switch\t\t(default 1)
 		-I: northd/southd dbs ip address\t(default 192.168.0.1)
@@ -70,6 +73,7 @@ Usage: $0 [-PSIDNMiud] <setup|run_test|create_fake_vm|remove_fake_vm|configure_o
 		-N: random bound\t\t\t(default 10)
 		-M: # of test round\t\t\t(default 0 - no test)
 		-D: test rate [sec]\t\t\t(defaulr 1s)
+		-e: enable/disable localnet connection
 
 		- run_test: run add/remove port test for M times
 		- setup: create a OVN overlay network (switch=L2 or router=L3)
@@ -103,6 +107,9 @@ create_fake_vm() {
 	ip -n sw$1pod$2 addr add "$IP/16" dev sw$1pod$2
 	ip -n sw$1pod$2 link set sw$1pod$2 up
 	ip -n sw$1pod$2 route add default via $((1+$1/254)).$(($1%254)).254.254
+
+	ip -n sw$1pod$2 addr add "2001:db8:$1::$(($2+10))/64" dev sw$1pod$2
+	ip -n sw$1pod$2 route add default via 2001:db8:$1::1
 }
 
 remove_fake_vm() {
@@ -120,8 +127,9 @@ create_ovn_ls_port() {
 	# $4: ip address
 
 	ovn-nbctl lsp-add sw$1 sw$1-port$2 \
-		  -- lsp-set-addresses sw$1-port$2 "$3 $4" \
-		  -- acl-add sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && icmp4" allow-related \
+		  -- lsp-set-addresses sw$1-port$2 "$3 $4"
+	[ $ACL -ne 0 ] && ovn-nbctl acl-add sw$1 to-lport 1002 \
+	          "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && icmp4" allow-related \
 		  -- acl-add sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && tcp && tcp.dst == 22" allow-related \
 		  -- acl-add sw$1 to-lport 1001 "outport == \"sw$1-port$2\" && ip" drop \
 		  -- acl-add sw$1 from-lport 1002 "inport == \"sw$1-port$2\" && ip4 && ip4.dst == {255.255.255.255, 10.1.0.0/16} && udp && udp.src == 68 && udp.dst == 67" allow \
@@ -133,8 +141,9 @@ remove_ovn_ls_port() {
 	# $1: switch id
 	# $2: port id
 
-	ovn-nbctl lsp-del sw$1-port$2 \
-		  -- acl-del sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && icmp4" \
+	ovn-nbctl lsp-del sw$1-port$2
+	[ $ACL -ne 0 ] && ovn-nbctl acl-del sw$1 to-lport 1002 \
+		  "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && icmp4" \
 		  -- acl-del sw$1 to-lport 1002 "outport == \"sw$1-port$2\" && ip4 && ip4.src == 0.0.0.0/0 && tcp && tcp.dst == 22" \
 		  -- acl-del sw$1 to-lport 1001 "outport == \"sw$1-port$2\" && ip" \
 		  -- acl-del sw$1 from-lport 1002 "inport == \"sw$1-port$2\" && ip4 && ip4.dst == {255.255.255.255, 10.1.0.0/16} && udp && udp.src == 68 && udp.dst == 67" \
@@ -210,17 +219,41 @@ create_ovn_ls() {
 		local MAC=00:$(dec2hex $(($1/254))):$(dec2hex $(($1%254))):00:$(dec2hex $((port/254))):$(dec2hex $((port%254)))
 		local IP=$((1+$1/254)).$(($1%254)).$((port/254)).$((port%254))
 
-		create_ovn_ls_port $1 $port $MAC $IP
+		create_ovn_ls_port $1 $port "$MAC $IP 2001:db8:$1::$((port+10))"
 	done
 }
 
+create_ovn_ls_ext() {
+	# $1: localnet port mac address
+	# $2: router port name
+
+	ovn-nbctl ls-add sw-ext
+	ovn-nbctl lsp-add sw-ext ext-lr0 -- \
+		  lsp-set-type ext-lr0 router -- \
+		  lsp-set-addresses ext-lr0 $1 -- \
+		  lsp-set-options ext-lr0 router-port=$2 -- \
+		  lsp-add sw-ext ext-localnet -- \
+		  lsp-set-addresses ext-localnet unknown -- \
+		  lsp-set-type ext-localnet localnet -- \
+		  lsp-set-options ext-localnet network_name=extNet
+}
+
 create_ovn_lr() {
-	ovn-nbctl lr-add lr0
+	# $1: localnet port mac address
+	# $2: localnet port ip address
+
+	if [ $EXT -eq 0 ]; then
+		ovn-nbctl lr-add lr0
+	else
+		ovn-nbctl create Logical_Router name=lr0 options:chassis=ctrl-1
+		ovn-nbctl lrp-add lr0 lr0-ext $1 $2
+	fi
 	for dev in $(seq 1 $LOGICAL_SWITCH); do
 		local MAC=00:$(dec2hex $((dev/254))):$(dec2hex $((dev%254))):ff:$(dec2hex $((dev/254))):$(dec2hex $((dev%254)))
 
 		create_ovn_ls $dev
-		ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16 -- \
+		#ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16 -- \
+		ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16 2001:db8:$dev::1/64 -- \
 			  lsp-add sw$dev sw$dev-portr0 -- \
 			  lsp-set-type sw$dev-portr0 router -- \
 			  lsp-set-addresses sw$dev-portr0 $MAC -- \
@@ -347,10 +380,17 @@ setup() {
 		# configure a new environment
 		set_default_evn
 		# clear ovn configuration
-		ovn-nbctl lr-del lr0
+		for r in $(ovn-nbctl lr-list | awk '{print $1}'); do
+			ovn-nbctl lr-del $r
+		done
 		for dev in $(ovn-nbctl ls-list | awk '{print $1}'); do
 			ovn-nbctl ls-del $dev
 		done
+		if [ $EXT -eq 0 ]; then
+			ovn-nbctl ls-del sw-ext
+			ovs-vsctl remove open . external_ids ovn-bridge-mappings
+			ovs-vsctl del-br br-ext
+		fi
 
 		systemctl restart ovn-northd
 
@@ -358,10 +398,24 @@ setup() {
 		ovn-nbctl set-connection ptcp:6641
 
 		echo ovn-central > /etc/openvswitch/system-id.conf
-		[ "$1" = router ] && create_ovn_lr || create_ovn_ls 1
+		if [ "$1" = router ]; then
+			# XXX define mac/ip if used for localnet
+			create_ovn_lr 02:0a:7f:00:01:29 192.168.123.254/24
+		else
+			create_ovn_ls 1
+		fi
 
 		# configure remote ovn-controller list
 		configure_ovn_ctrl_list
+
+		# configure dataNet
+		if [ $EXT -ne 0 ]; then
+			create_ovn_ls_ext 02:0a:7f:00:01:29 lr0-ext
+			ovs-vsctl add-br br-ext
+			ovs-vsctl set Open_vSwitch . external-ids:ovn-bridge-mappings=extNet:br-ext
+			# XXX define ethernet if used for localnet
+			ovs-vsctl add-port br-ext ens8
+		fi
 	} >/dev/null 2>&1
 
 	# run the test
@@ -396,6 +450,12 @@ while true; do
 			shift 2 ;;
 		-M)
 			M=$2
+			shift 2 ;;
+		-A)
+			ACL=$2
+			shift 2 ;;
+		-e)
+			EXT=$2
 			shift 2 ;;
 		*)
 			break ;;
