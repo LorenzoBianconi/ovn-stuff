@@ -1,6 +1,8 @@
 #!/bin/bash
 
 WORKSPACE=/tmp/ovn-test/
+LOCALNET_IP=192.168.123.254
+EXT_DEV=ens8
 
 dec2hex() {
 	printf "%02x" $1
@@ -249,7 +251,7 @@ create_ovn_lr() {
 		ovn-nbctl lrp-add lr0 lr0-ext $1 $2
 	else
 		ovn-nbctl lr-add lr0
-		if [ "$EXT" = GR ]; then
+		if [ "$EXT" = GP ]; then
 			ovn-nbctl lrp-add lr0 lr0-ext $1 $2
 			ovn-nbctl lrp-set-gateway-chassis lr0-ext ctrl-1 20
 		fi
@@ -257,6 +259,10 @@ create_ovn_lr() {
 	for dev in $(seq 1 $LOGICAL_SWITCH); do
 		local MAC=00:$(dec2hex $((dev/254))):$(dec2hex $((dev%254))):ff:$(dec2hex $((dev/254))):$(dec2hex $((dev%254)))
 
+		if [ "$EXT" = GR -o "$EXT" = GP ]; then
+			# Enable SNAT
+			ovn-nbctl lr-nat-add lr0 snat $LOCALNET_IP $((1+$dev/254)).$(($dev%254)).0.0/24
+		fi
 		create_ovn_ls $dev
 		#ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16 -- \
 		ovn-nbctl lrp-add lr0 lrp$dev $MAC $((1+$dev/254)).$(($dev%254)).254.254/16 2001:db8:$dev::1/64 -- \
@@ -406,7 +412,7 @@ setup() {
 		echo ovn-central > /etc/openvswitch/system-id.conf
 		if [ "$1" = router ]; then
 			# XXX define mac/ip if used for localnet
-			create_ovn_lr 02:0a:7f:00:01:29 "192.168.123.254/24 2001:db8:f0f0::1/64"
+			create_ovn_lr 02:0a:7f:00:01:29 "$LOCALNET_IP/24 2001:db8:f0f0::1/64"
 		else
 			create_ovn_ls 1
 		fi
@@ -420,7 +426,7 @@ setup() {
 			ovs-vsctl add-br br-ext
 			ovs-vsctl set Open_vSwitch . external-ids:ovn-bridge-mappings=extNet:br-ext
 			# XXX define ethernet if used for localnet
-			ovs-vsctl add-port br-ext ens8
+			ovs-vsctl add-port br-ext $EXT_DEV
 		fi
 	} >/dev/null 2>&1
 
