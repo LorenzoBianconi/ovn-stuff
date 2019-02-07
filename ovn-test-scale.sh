@@ -40,7 +40,7 @@ check_default() {
 	[ -z "$N" ] && N=10
 	[ -z "$M" ] && M=0
 	[ -z "$ACL" ] && ACL=0
-	[ -z "$EXT" ] && EXT=0
+	[ -z "$EXT" ] && EXT=""
 }
 
 check_operation() {
@@ -73,7 +73,9 @@ Usage: $0 [-APSIDNMiude] <setup|run_test|create_fake_vm|remove_fake_vm|configure
 		-N: random bound\t\t\t(default 10)
 		-M: # of test round\t\t\t(default 0 - no test)
 		-D: test rate [sec]\t\t\t(defaulr 1s)
-		-e: enable/disable localnet connection
+		-e: enable/disable localnet connection\t(default none)
+		    - GR: use Gateway Router
+		    - GP: use Gateway Router Port
 
 		- run_test: run add/remove port test for M times
 		- setup: create a OVN overlay network (switch=L2 or router=L3)
@@ -242,11 +244,15 @@ create_ovn_lr() {
 	# $1: localnet port mac address
 	# $2: localnet port ip address
 
-	if [ $EXT -eq 0 ]; then
-		ovn-nbctl lr-add lr0
-	else
+	if [ "$EXT" = GR ]; then
 		ovn-nbctl create Logical_Router name=lr0 options:chassis=ctrl-1
 		ovn-nbctl lrp-add lr0 lr0-ext $1 $2
+	else
+		ovn-nbctl lr-add lr0
+		if [ "$EXT" = GR ]; then
+			ovn-nbctl lrp-add lr0 lr0-ext $1 $2
+			ovn-nbctl lrp-set-gateway-chassis lr0-ext ctrl-1 20
+		fi
 	fi
 	for dev in $(seq 1 $LOGICAL_SWITCH); do
 		local MAC=00:$(dec2hex $((dev/254))):$(dec2hex $((dev%254))):ff:$(dec2hex $((dev/254))):$(dec2hex $((dev%254)))
@@ -386,7 +392,7 @@ setup() {
 		for dev in $(ovn-nbctl ls-list | awk '{print $1}'); do
 			ovn-nbctl ls-del $dev
 		done
-		if [ $EXT -eq 0 ]; then
+		if [ "$EXT" != GR -a "$EXT" != GP ]; then
 			ovn-nbctl ls-del sw-ext
 			ovs-vsctl remove open . external_ids ovn-bridge-mappings
 			ovs-vsctl del-br br-ext
@@ -400,7 +406,7 @@ setup() {
 		echo ovn-central > /etc/openvswitch/system-id.conf
 		if [ "$1" = router ]; then
 			# XXX define mac/ip if used for localnet
-			create_ovn_lr 02:0a:7f:00:01:29 192.168.123.254/24
+			create_ovn_lr 02:0a:7f:00:01:29 "192.168.123.254/24 2001:db8:f0f0::1/64"
 		else
 			create_ovn_ls 1
 		fi
@@ -409,7 +415,7 @@ setup() {
 		configure_ovn_ctrl_list
 
 		# configure dataNet
-		if [ $EXT -ne 0 ]; then
+		if [ "$EXT" = GR -o "$EXT" = GP ]; then
 			create_ovn_ls_ext 02:0a:7f:00:01:29 lr0-ext
 			ovs-vsctl add-br br-ext
 			ovs-vsctl set Open_vSwitch . external-ids:ovn-bridge-mappings=extNet:br-ext
