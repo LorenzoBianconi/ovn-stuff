@@ -175,7 +175,7 @@ class OvnWorkload:
         print("***** creating lport {} *****".format(name))
         lswitch_port = self.nbctl.ls_port_add(lswitch["name"], name,
                                               mac = str(RandMac()),
-                                              ip = ip, gw = gw)
+                                              ip = ip_mask, gw = gw)
         return lswitch_port
 
     def create_lswitch(self, lswitch_create_args = {}, iteration = 0):
@@ -202,7 +202,7 @@ class OvnWorkload:
                                               mac, lrouter_port_ip)
         lswitch_port = self.nbctl.ls_port_add(lswitch["name"],
                                               "rp-" + lswitch["name"],
-                                              lrouter["name"])
+                                              lswitch["name"])
 
     def create_routed_network(self, lswitch_create_args = {},
                               lport_bind_args = {}):
