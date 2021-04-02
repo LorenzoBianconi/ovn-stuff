@@ -8,6 +8,9 @@ from randmac import RandMac
 class OvnWorkload:
     def __init__(self, controller = None):
         self.controller = controller
+        self.nbctl = ovn_utils.OvnNbctl(controller, container = controller["name"])
+        self.lswitches = []
+        self.lports = []
 
     def add_central(self, fake_multinode_args = {}):
         print("***** creating central node *****")
@@ -143,8 +146,7 @@ class OvnWorkload:
             time.sleep(0.1)
 
     def bind_and_wait_port(self, lport = None, lport_bind_args = {},
-                           sandboxes = [], iteration = 0):
-        sandbox = sandboxes[iteration % len(sandboxes)]
+                           sandbox = None):
         node = {
             "ip": sandbox["farm"],
         }
@@ -158,8 +160,8 @@ class OvnWorkload:
             vsctl.bind_vm_port(lport)
 
 
-    def create_lswitch_port(self, nbctl = None, lswitch = None,
-                            lport_create_args = {}, iteration = 0):
+    def create_lswitch_port(self, lswitch = None, lport_create_args = {},
+                            iteration = 0):
         cidr = lswitch.get("cidr", None)
         if cidr:
             ip = str(next(netaddr.iter_iprange(cidr.ip + iteration + 1,
@@ -172,13 +174,14 @@ class OvnWorkload:
             ip_mask = ""
             ip = ""
             gw = ""
-        lswitch_port = nbctl.ls_port_add(lswitch["name"], name,
-                                         mac = str(RandMac()),
-                                         ip = ip, gw = gw)
+
+        print("***** creating lport {} *****".format(name))
+        lswitch_port = self.nbctl.ls_port_add(lswitch["name"], name,
+                                              mac = str(RandMac()),
+                                              ip = ip, gw = gw)
         return lswitch_port
 
-    def create_lswitch(self, nbctl = None, lswitch_create_args = {},
-                       iteration = 0):
+    def create_lswitch(self, lswitch_create_args = {}, iteration = 0):
         start_cidr = lswitch_create_args.get("start_cidr", "")
         if start_cidr:
             start_cidr = netaddr.IPNetwork(start_cidr)
@@ -188,39 +191,48 @@ class OvnWorkload:
             name = 'lswitch_'.join(random.choice(string.ascii_letters) for i in range(10))
 
         print("***** creating lswitch {} *****".format(name))
-        lswitch = nbctl.ls_add(name)
+        lswitch = self.nbctl.ls_add(name)
         if start_cidr:
             lswitch["cidr"] = cidr
 
         return lswitch
 
-    def connect_lswitch_to_router(self, nbctl = None, lrouter = None,
-                                  lswitch = None):
+    def connect_lswitch_to_router(self, lrouter = None, lswitch = None):
         gw = netaddr.IPAddress(lswitch["cidr"].last - 1)
         lrouter_port_ip = '{}/{}'.format(gw, lswitch["cidr"].prefixlen)
         mac = RandMac()
-        lrouter_port = nbctl.lr_port_add(lrouter["name"], lswitch["name"],
-                                         mac, lrouter_port_ip)
-        lswitch_port = nbctl.ls_port_add(lswitch["name"],
-                                         "rp-" + lswitch["name"],
-                                         lrouter["name"])
+        lrouter_port = self.nbctl.lr_port_add(lrouter["name"], lswitch["name"],
+                                              mac, lrouter_port_ip)
+        lswitch_port = self.nbctl.ls_port_add(lswitch["name"],
+                                              "rp-" + lswitch["name"],
+                                              lrouter["name"])
 
     def create_routed_network(self, lswitch_create_args = {},
                               lport_bind_args = {}, sandboxes = None):
         # create logical router
-        nbctl = ovn_utils.OvnNbctl(self.controller,
-                                   container = self.controller["name"])
         name = ''.join(random.choice(string.ascii_letters) for i in range(10))
-        router = nbctl.lr_add("lrouter_" + name)
+        router = self.nbctl.lr_add("lrouter_" + name)
 
         # create logical switches
-        lswitches = []
-        lports = []
         for i in range(lswitch_create_args.get("nlswitch", 10)):
-            lswitch = self.create_lswitch(nbctl, lswitch_create_args, i)
-            lswitches.append(lswitch)
-            self.connect_lswitch_to_router(nbctl, router, lswitch)
-            lport = self.create_lswitch_port(nbctl, lswitch, iteration = i)
-            lports.append(lport)
+            lswitch = self.create_lswitch(lswitch_create_args, i)
+            self.lswitches.append(lswitch)
+            self.connect_lswitch_to_router(router, lswitch)
+            lport = self.create_lswitch_port(lswitch, iteration = 0)
+            self.lports.append(lport)
+            sandbox = sandboxes[i % len(sandboxes)]
             self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
-                                    sandboxes = sandboxes, iteration = i)
+                                    sandbox = sandbox)
+
+    def configure_routed_lport(self, sandbox = None, lswitch = None,
+                               lport_bind_args = {}, iteration = 0):
+        lport = self.create_lswitch_port(lswitch, iteration = iteration + 2)
+        self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
+                                sandbox = sandbox)
+
+    def create_routed_lport(self, sandboxes = None, lport_bind_args = {},
+                            iteration = 0):
+        lswitch = self.lswitches[iteration % len(self.lswitches)]
+        sandbox = sandboxes[iteration % len(sandboxes)]
+        self.configure_routed_lport(sandbox, lswitch, lport_bind_args,
+                                    iteration)

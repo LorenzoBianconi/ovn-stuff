@@ -9,6 +9,7 @@ import yaml
 import ovn_workload
 
 n_sandboxes = 10
+n_lports = 10
 sandboxes = [] # ovn sanbox list
 farm_list = [ "127.0.0.1" ]
 
@@ -89,6 +90,10 @@ def run_test():
     ovn.create_routed_network(lswitch_create_args = lswitch_create_args,
                               lport_bind_args = lport_bind_args,
                               sandboxes = sandboxes)
+    # create ovn logical ports
+    for i in range(n_lports):
+        ovn.create_routed_lport(sandboxes = sandboxes,
+                                lport_bind_args = lport_bind_args, iteration = i)
 
 if __name__ == '__main__':
     sys.exit(run_test())
