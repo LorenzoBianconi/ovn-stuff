@@ -60,7 +60,7 @@ def run_test():
         "max_timeout_s": 10,
         "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
     }
-    ovn = ovn_workload.OvnWorkload(controller)
+    ovn = ovn_workload.OvnWorkload(controller, sandboxes)
     ovn.add_central(fake_multinode_args)
 
     # creat swith-per-node topology
@@ -68,16 +68,14 @@ def run_test():
         "start_ext_cidr": "3.0.0.0/16"
     }
     for i in range(n_sandboxes):
-        ovn.add_chassis_node(sandboxes, fake_multinode_args, iteration = i)
+        ovn.add_chassis_node(fake_multinode_args, iteration = i)
         if lnetwork_create_args.get('gw_router_per_network', False):
-            ovn.add_chassis_node_localnet(sandboxes, fake_multinode_args,
-                                          iteration = i)
-            ovn.add_chassis_external_host(sandboxes, lnetwork_create_args,
-                                          iteration = i)
+            ovn.add_chassis_node_localnet(fake_multinode_args, iteration = i)
+            ovn.add_chassis_external_host(lnetwork_create_args, iteration = i)
 
     for i in range(n_sandboxes):
-        ovn.connect_chassis_node(sandboxes, fake_multinode_args, iteration = i)
-        ovn.wait_chassis_node(sandboxes, fake_multinode_args, iteration = i)
+        ovn.connect_chassis_node(fake_multinode_args, iteration = i)
+        ovn.wait_chassis_node(fake_multinode_args, iteration = i)
 
     lswitch_create_args = {
         "start_cidr" : "16.0.0.0/16",
@@ -88,12 +86,11 @@ def run_test():
     }
     # create ovn topology
     ovn.create_routed_network(lswitch_create_args = lswitch_create_args,
-                              lport_bind_args = lport_bind_args,
-                              sandboxes = sandboxes)
+                              lport_bind_args = lport_bind_args)
     # create ovn logical ports
     for i in range(n_lports):
-        ovn.create_routed_lport(sandboxes = sandboxes,
-                                lport_bind_args = lport_bind_args, iteration = i)
+        ovn.create_routed_lport(lport_bind_args = lport_bind_args,
+                                iteration = i)
 
 if __name__ == '__main__':
     sys.exit(run_test())

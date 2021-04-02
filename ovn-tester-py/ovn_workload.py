@@ -6,8 +6,9 @@ import string
 from randmac import RandMac
 
 class OvnWorkload:
-    def __init__(self, controller = None):
+    def __init__(self, controller = None, sandboxes = None):
         self.controller = controller
+        self.sandboxes = sandboxes
         self.nbctl = ovn_utils.OvnNbctl(controller, container = controller["name"])
         self.lswitches = []
         self.lports = []
@@ -38,9 +39,8 @@ class OvnWorkload:
     
         time.sleep(5)
 
-    def add_chassis_node_localnet(self, sandboxes = [], fake_multinode_args = {},
-                                  iteration = 0):
-        sandbox = sandboxes[iteration % len(sandboxes)]
+    def add_chassis_node_localnet(self, fake_multinode_args = {}, iteration = 0):
+        sandbox = self.sandboxes[iteration % len(self.sandboxes)]
     
         print("***** creating localnet on %s controller *****" % sandbox["name"])
     
@@ -53,9 +53,8 @@ class OvnWorkload:
         client = ovn_utils.SSH(node, container = sandbox["name"])
         client.run(cmd = cmd)
     
-    def add_chassis_external_host(self, sandboxes = [], lnetwork_create_args = {},
-                                  iteration = 0):
-        sandbox = sandboxes[iteration % len(sandboxes)]
+    def add_chassis_external_host(self, lnetwork_create_args = {}, iteration = 0):
+        sandbox = self.sandboxes[iteration % len(self.sandboxes)]
         cidr = netaddr.IPNetwork(lnetwork_create_args.get('start_ext_cidr'))
         ext_cidr = cidr.next(iteration)
     
@@ -78,8 +77,7 @@ class OvnWorkload:
         client.run(cmd = "ip link set dev veth1 up")
         client.run(cmd = "ovs-vsctl add-port br-ex veth1")
     
-    def add_chassis_node(self, sandboxes = [], fake_multinode_args = {},
-                         iteration = 0):
+    def add_chassis_node(self, fake_multinode_args = {}, iteration = 0):
         node_net = fake_multinode_args.get("node_net")
         node_net_len = fake_multinode_args.get("node_net_len")
         node_cidr = netaddr.IPNetwork("{}/{}".format(node_net, node_net_len))
@@ -87,7 +85,7 @@ class OvnWorkload:
     
         ovn_fake_path = fake_multinode_args.get("cluster_cmd_path")
     
-        sandbox = sandboxes[iteration % len(sandboxes)]
+        sandbox = self.sandboxes[iteration % len(self.sandboxes)]
     
         print("***** adding %s controller *****" % sandbox["name"])
     
@@ -111,9 +109,8 @@ class OvnWorkload:
         client = ovn_utils.SSH(node)
         client.run(cmd)
 
-    def connect_chassis_node(self, sandboxes = [], fake_multinode_args = {},
-                             iteration = 0):
-        sandbox = sandboxes[iteration % len(sandboxes)]
+    def connect_chassis_node(self, fake_multinode_args = {}, iteration = 0):
+        sandbox = self.sandboxes[iteration % len(self.sandboxes)]
         node_prefix = fake_multinode_args.get("node_prefix", "")
     
         print("***** connecting %s controller *****" % sandbox["name"])
@@ -134,9 +131,9 @@ class OvnWorkload:
         client = ovn_utils.SSH(node)
         client.run(cmd = cmd)
 
-    def wait_chassis_node(self, sandboxes = [], fake_multinode_args = {},
-                          iteration = 0, controller = {}):
-        sandbox = sandboxes[iteration % len(sandboxes)]
+    def wait_chassis_node(self, fake_multinode_args = {}, iteration = 0,
+                          controller = {}):
+        sandbox = self.sandboxes[iteration % len(self.sandboxes)]
         max_timeout_s = fake_multinode_args.get("max_timeout_s")
         for i in range(0, max_timeout_s * 10):
             sbctl = ovn_utils.OvnSbctl(self.controller,
@@ -208,7 +205,7 @@ class OvnWorkload:
                                               lrouter["name"])
 
     def create_routed_network(self, lswitch_create_args = {},
-                              lport_bind_args = {}, sandboxes = None):
+                              lport_bind_args = {}):
         # create logical router
         name = ''.join(random.choice(string.ascii_letters) for i in range(10))
         router = self.nbctl.lr_add("lrouter_" + name)
@@ -220,7 +217,7 @@ class OvnWorkload:
             self.connect_lswitch_to_router(router, lswitch)
             lport = self.create_lswitch_port(lswitch, iteration = 0)
             self.lports.append(lport)
-            sandbox = sandboxes[i % len(sandboxes)]
+            sandbox = self.sandboxes[i % len(self.sandboxes)]
             self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
                                     sandbox = sandbox)
 
@@ -230,9 +227,8 @@ class OvnWorkload:
         self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
                                 sandbox = sandbox)
 
-    def create_routed_lport(self, sandboxes = None, lport_bind_args = {},
-                            iteration = 0):
+    def create_routed_lport(self, lport_bind_args = {}, iteration = 0):
         lswitch = self.lswitches[iteration % len(self.lswitches)]
-        sandbox = sandboxes[iteration % len(sandboxes)]
+        sandbox = self.sandboxes[iteration % len(self.sandboxes)]
         self.configure_routed_lport(sandbox, lswitch, lport_bind_args,
                                     iteration)
