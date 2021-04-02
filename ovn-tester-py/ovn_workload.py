@@ -5,7 +5,7 @@ import random
 import string
 from randmac import RandMac
 
-class OvnFake:
+class OvnWorkload:
     def __init__(self, controller = None):
         self.controller = controller
 
@@ -224,4 +224,3 @@ class OvnFake:
             lports.append(lport)
             self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
                                     sandboxes = sandboxes, iteration = i)
-

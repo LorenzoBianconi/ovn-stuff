@@ -6,8 +6,9 @@ import ovn_utils
 import netaddr
 import time
 import yaml
-import ovn_fake
+import ovn_workload
 
+n_sandboxes = 10
 sandboxes = [] # ovn sanbox list
 farm_list = [ "127.0.0.1" ]
 
@@ -41,7 +42,6 @@ def create_sandbox(sandbox_create_args = {}, iteration = 0):
 
 def run_test():
     # create sandox list
-    n_sandboxes = 10
     for i in range(n_sandboxes):
         create_sandbox(iteration = i)
 
@@ -59,7 +59,7 @@ def run_test():
         "max_timeout_s": 10,
         "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
     }
-    ovn = ovn_fake.OvnFake(controller)
+    ovn = ovn_workload.OvnWorkload(controller)
     ovn.add_central(fake_multinode_args)
 
     # creat swith-per-node topology
