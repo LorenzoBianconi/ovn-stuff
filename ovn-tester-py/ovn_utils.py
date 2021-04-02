@@ -92,7 +92,32 @@ class OvnNbctl:
         elif len(mac) or len(ip):
             cmd = "lsp-set-addresses {} \"{} {}\"".format(name, mac, ip)
             self.run(cmd = cmd)
-        return { "name" : name, "mac" : mac, "ip" : ip, "gw" : gw }
+        stdout = StringIO()
+        cmd = "get logical_switch_port {} _uuid".format(name)
+        self.run(cmd = cmd, stdout = stdout)
+        uuid = stdout.getvalue()
+        return { "name" : name, "mac" : mac, "ip" : ip, "gw" : gw , "uuid" : uuid }
+
+    def port_group_add(self, name = "", lport = None, create = True):
+        if (create):
+            self.run(cmd = "pg-add {} {}".format(name, lport["name"]))
+        else:
+            cmd = "add port_group {} ports {}".format(name, lport["uuid"])
+            self.run(cmd = cmd)
+
+    def address_set_add(self, name = "", addrs = "", create = True):
+        if create:
+            cmd = "create Address_Set name=\"" + name + "\" addresses=\"" + addrs + "\""
+        else:
+            cmd =  "add Address_Set \"" + name + "\" addresses \"" + addrs + "\""
+        self.run(cmd = cmd)
+
+    def acl_add(self, name = "", direction = "from-lport", priority = 100,
+                entity = "switch", match = "", verdict = "allow"):
+        cmd = "--type={} acl-add {} {} {} \"{}\" {}".format(entity, name, direction,
+                                                            str(priority), match,
+                                                            verdict)
+        self.run(cmd = cmd)
 
 class OvnSbctl:
     def __init__(self, node = {}, container = None):

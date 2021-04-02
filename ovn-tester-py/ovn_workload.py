@@ -221,14 +221,108 @@ class OvnWorkload:
             self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
                                     sandbox = sandbox)
 
+    def create_acl(self, lswitch = None, lport = None, acl_create_args = {}):
+        print("***** creating acl on {} *****".format(lport["name"]))
+
+        direction = acl_create_args.get("direction", "to-lport")
+        priority = acl_create_args.get("priority", 1000)
+        verdict = acl_create_args.get("action", "allow")
+        address_set = acl_create_args.get("address_set", "")
+        acl_type = acl_create_args.get("type", "switch")
+
+        '''
+        match template: {
+            "direction" : "<inport/outport>",
+            "lport" : "<switch port or port-group>",
+            "address_set" : "<address_set id>"
+            "l4_port" : "<l4 port number>",
+        }
+        '''
+        match_template = acl_create_args.get("match",
+                                             "%(direction)s == %(lport)s && \
+                                             ip4 && udp && udp.src == %(l4_port)s")
+        p = "inport" if direction == "from-lport" else "outport"
+        match = match_template % {
+            "direction" : p,
+            "lport" : lport["name"],
+            "address_set" : address_set,
+            "l4_port" : 100
+        }
+        self.nbctl.acl_add(lswitch["name"], direction, priority, acl_type,
+                           match, verdict)
+
+    def create_port_group_acls(self, name):
+        port_group_acl = { "name" : "@%s" % name }
+        port_group = { "name" : name }
+        """
+        create two acl for each ingress/egress of the Network Policy (NP)
+        to allow ingress and egress traffic selected by the NP
+        """
+        # ingress
+        match = "%(direction)s == %(lport)s && ip4.src == $%(address_set)s"
+        acl_create_args = {
+            "match" : match,
+            "address_set" : "%s_ingress_as" % name,
+            "priority": 1010, "direction": "from-lport",
+            "type": "port-group"
+        }
+        self.create_acl(port_group, port_group_acl, acl_create_args)
+        acl_create_args = {
+            "priority" : 1009,
+            "match" : "%(direction)s == %(lport)s && ip4",
+            "type": "port-group", "direction":"from-lport",
+            "action": "allow-related"
+        }
+        self.create_acl(port_group, port_group_acl, acl_create_args)
+        # egress
+        match = "%(direction)s == %(lport)s && ip4.dst == $%(address_set)s"
+        acl_create_args = {
+            "match" : match,
+            "address_set" : "%s_egress_as" % name,
+            "priority": 1010, "type": "port-group"
+        }
+        self.create_acl(port_group, port_group_acl, acl_create_args)
+        acl_create_args = {
+            "priority" : 1009,
+            "match" : "%(direction)s == %(lport)s && ip4",
+            "type": "port-group"," action": "allow-related"
+        }
+        self.create_acl(port_group, port_group_acl, acl_create_args)
+
+    def create_update_network_policy(self, name = "", lport = None, ip = "",
+                                     create = True):
+        self.nbctl.port_group_add(name, lport, create)
+        self.nbctl.address_set_add("%s_ingress_as" % name, ip, create)
+        self.nbctl.address_set_add("%s_egress_as" % name, ip, create)
+        if (create):
+            self.create_port_group_acls(name)
+
     def configure_routed_lport(self, sandbox = None, lswitch = None,
-                               lport_bind_args = {}, iteration = 0):
+                               lport_create_args = {}, lport_bind_args = {},
+                               iteration = 0):
         lport = self.create_lswitch_port(lswitch, iteration = iteration + 2)
         self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
                                 sandbox = sandbox)
+        if lport_create_args.get("create_acls", False):
+            cidr = lswitch.get("cidr", None)
+            if cidr:
+                ip = str(next(netaddr.IPNetwork(cidr.ip + 2).iter_hosts()))
+            else:
+                ip = ""
 
-    def create_routed_lport(self, lport_bind_args = {}, iteration = 0):
+            # create or update network policy
+            network_policy_size = lport_create_args.get("network_policy_size", 1)
+            network_policy_index = iteration / network_policy_size
+            create_network_policy = (iteration % network_policy_size) == 0
+            port_group_name = "networkPolicy%d" % network_policy_index
+            self.create_update_network_policy(port_group_name, lport, ip,
+                                              create_network_policy)
+
+    def create_routed_lport(self, lport_create_args = {},
+                            lport_bind_args = {}, iteration = 0):
         lswitch = self.lswitches[iteration % len(self.lswitches)]
         sandbox = self.sandboxes[iteration % len(self.sandboxes)]
-        self.configure_routed_lport(sandbox, lswitch, lport_bind_args,
-                                    iteration)
+        self.configure_routed_lport(sandbox, lswitch,
+                                    lport_create_args = lport_create_args,
+                                    lport_bind_args = lport_bind_args,
+                                    iteration = iteration)

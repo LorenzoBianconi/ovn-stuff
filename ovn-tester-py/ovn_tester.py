@@ -87,9 +87,16 @@ def run_test():
     # create ovn topology
     ovn.create_routed_network(lswitch_create_args = lswitch_create_args,
                               lport_bind_args = lport_bind_args)
+
+    lport_create_args = {
+        "network_policy_size": 2,
+        "name_space_size": 2,
+        "create_acls": True
+    }
     # create ovn logical ports
     for i in range(n_lports):
-        ovn.create_routed_lport(lport_bind_args = lport_bind_args,
+        ovn.create_routed_lport(lport_create_args = lport_create_args,
+                                lport_bind_args = lport_bind_args,
                                 iteration = i)
 
 if __name__ == '__main__':
