@@ -289,13 +289,119 @@ class OvnWorkload:
         }
         self.create_acl(port_group, port_group_acl, acl_create_args)
 
-    def create_update_network_policy(self, name = "", lport = None, ip = "",
-                                     create = True):
+    def create_update_deny_port_group(self, lport = None, create = True):
+        self.nbctl.port_group_add("portGroupDefDeny", lport, create)
+        if create:
+            # create defualt acl for ingress and egress traffic: only allow ARP traffic
+            port_group_acl = {
+                "name" : "@portGroupDefDeny"
+            }
+            port_group = {
+                "name" : "portGroupDefDeny"
+            }
+            # ingress
+            acl_create_args = {
+                "match" : "%(direction)s == %(lport)s && arp",
+                "priority": 1001, "direction": "from-lport",
+                "type": "port-group"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+            acl_create_args = {
+                "match" : "%(direction)s == %(lport)s",
+                "direction": "from-lport", "action": "drop",
+                "type": "port-group"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+            # egress
+            acl_create_args = {
+                "match" : "%(direction)s == %(lport)s && arp",
+                "priority": 1001,
+                "type": "port-group"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+            acl_create_args = {
+                "match" : "%(direction)s == %(lport)s",
+                "action": "drop",
+                "type": "port-group"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+
+    def create_update_deny_multicast_port_group(self, lport = None,
+                                                create = True):
+        self.nbctl.port_group_add("portGroupMultiDefDeny", lport, create)
+        if create:
+            # create defualt acl for ingress and egress multicast traffic: drop all multicast
+            port_group_acl = {
+                "name" : "@portGroupMultiDefDeny"
+            }
+            port_group = {
+                "name" : "portGroupMultiDefDeny"
+            }
+            # ingress
+            acl_create_args = {
+                "match" : "%(direction)s == %(lport)s && ip4.mcast",
+                "priority": 1011, "direction": "from-lport",
+                "type": "port-group", "action": "drop"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+            # egress
+            acl_create_args = {
+                "match" : "%(direction)s == %(lport)s && ip4.mcast",
+                "priority": 1011, "type": "port-group",
+                "action": "drop"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+
+    def create_update_network_policy(self, lport = None, ip = "",
+                                     lport_create_args = {},
+                                     iteration = 0):
+
+        network_policy_size = lport_create_args.get("network_policy_size", 1)
+        network_policy_index = iteration / network_policy_size
+        create = (iteration % network_policy_size) == 0
+        name = "networkPolicy%d" % network_policy_index
+
         self.nbctl.port_group_add(name, lport, create)
         self.nbctl.address_set_add("%s_ingress_as" % name, ip, create)
         self.nbctl.address_set_add("%s_egress_as" % name, ip, create)
         if (create):
             self.create_port_group_acls(name)
+
+        self.create_update_deny_port_group(lport, iteration == 0)
+        self.create_update_deny_multicast_port_group(lport, iteration == 0)
+
+    def create_update_name_space(self, lport = None, ip = "",
+                                 lport_create_args = {},
+                                 iteration = 0):
+        name_space_size = lport_create_args.get("name_space_size", 1)
+        name_space_index = iteration / name_space_size
+        create = (iteration % name_space_size) == 0
+        name = "nameSpace%d" % name_space_index
+        port_group_name = "mcastPortGroup_%s" % name
+        port_group_acl = {
+            "name" : "@" + port_group_name
+        }
+        port_group = {
+            "name" : port_group_name
+        }
+
+        self.nbctl.port_group_add(port_group_name, lport, create)
+        self.nbctl.address_set_add(name, ip, create)
+
+        if (create):
+            # create multicast ACL
+            match = "%(direction)s == %(lport)s && ip4.mcast"
+            acl_create_args = {
+                "match" : match, "priority": 1012,
+                "direction": "from-lport",
+                "type": "port-group"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
+            acl_create_args = {
+                "match" : match, "priority": 1012,
+                "type": "port-group"
+            }
+            self.create_acl(port_group, port_group_acl, acl_create_args)
 
     def configure_routed_lport(self, sandbox = None, lswitch = None,
                                lport_create_args = {}, lport_bind_args = {},
@@ -311,12 +417,14 @@ class OvnWorkload:
                 ip = ""
 
             # create or update network policy
-            network_policy_size = lport_create_args.get("network_policy_size", 1)
-            network_policy_index = iteration / network_policy_size
-            create_network_policy = (iteration % network_policy_size) == 0
-            port_group_name = "networkPolicy%d" % network_policy_index
-            self.create_update_network_policy(port_group_name, lport, ip,
-                                              create_network_policy)
+            self.create_update_network_policy(lport, ip,
+                    lport_create_args = lport_create_args,
+                    iteration = iteration)
+
+            # create/update namespace
+            self.create_update_name_space(lport, ip,
+                    lport_create_args = lport_create_args,
+                    iteration = iteration)
 
     def create_routed_lport(self, lport_create_args = {},
                             lport_bind_args = {}, iteration = 0):
