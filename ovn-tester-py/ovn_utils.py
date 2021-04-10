@@ -26,6 +26,10 @@ class SSH:
 
         if stdout:
             stdout.write(ssh_stdout.read().decode('ascii'))
+        else:
+            out = ssh_stdout.read().decode().strip()
+            if len(out):
+                print(out)
 
 class OvsVsctl:
     def __init__(self, node = {}, container = None):
@@ -118,6 +122,12 @@ class OvnNbctl:
                                                             str(priority), match,
                                                             verdict)
         self.run(cmd = cmd)
+
+    def wait_until(self, cmd = ""):
+        self.run("wait-until " + cmd)
+
+    def sync(self, wait = "hv"):
+       self.run("--wait={} sync".format(wait))
 
 class OvnSbctl:
     def __init__(self, node = {}, container = None):

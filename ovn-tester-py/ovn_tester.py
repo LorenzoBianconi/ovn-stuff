@@ -8,8 +8,8 @@ import time
 import yaml
 import ovn_workload
 
-n_sandboxes = 10
-n_lports = 10
+n_sandboxes = 4
+n_lports = 4
 sandboxes = [] # ovn sanbox list
 farm_list = [ "127.0.0.1" ]
 
@@ -83,6 +83,8 @@ def run_test():
     }
     lport_bind_args = {
         "internal" : True,
+        "wait_up": True,
+        "wait_sync" : "ping",
     }
     # create ovn topology
     ovn.create_routed_network(lswitch_create_args = lswitch_create_args,

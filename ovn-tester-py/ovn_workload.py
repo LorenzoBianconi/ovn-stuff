@@ -4,6 +4,7 @@ import netaddr
 import random
 import string
 from randmac import RandMac
+from datetime import datetime
 
 class OvnWorkload:
     def __init__(self, controller = None, sandboxes = None):
@@ -142,6 +143,45 @@ class OvnWorkload:
                 break
             time.sleep(0.1)
 
+    def ping_port(self, lport = None, sandbox = None, wait_timeout_s = 20):
+        start_time = datetime.now()
+        node = {
+            "ip": sandbox["farm"],
+        }
+        client = ovn_utils.SSH(node, container = sandbox["name"])
+        while True:
+            try:
+                cmd = "ip netns exec {} ping -q -c 1 -W 0.1 {}".format(
+                        lport["name"], lport["gw"])
+                client.run(cmd = cmd)
+                break
+            except:
+                pass
+
+            if (datetime.now() - start_time).seconds > wait_timeout_s:
+                LOG.info("Timeout waiting for port {} to be able to ping gateway {}".format(
+                        lport["name"], lport["gw"]))
+                raise exceptions.ThreadTimeoutException()
+
+    def wait_up_port(self, lport = None, sandbox = None, lport_bind_args = {}):
+        wait_timeout_s = lport_bind_args.get("wait_timeout_s", 20)
+        wait_sync = lport_bind_args.get("wait_sync", "hv")
+        if wait_sync.lower() not in ['hv', 'sb', 'ping', 'none']:
+            raise exceptions.InvalidConfigException(_(
+                "Unknown value for wait_sync: %s. "
+                "Only 'hv', 'sb' and 'none' are allowed.") % wait_sync)
+
+        print("***** wait port up: sync: {} *****".format(wait_sync))
+
+        if wait_sync == 'ping':
+            self.ping_port(lport = lport, sandbox = sandbox,
+                           wait_timeout_s = wait_timeout_s)
+        else:
+            cmd = "Logical_Switch_Port {} up=true".format(lport["name"])
+            self.nbctl.wait_until(cmd)
+            if wait_sync != 'none':
+                self.nbctl.sync(wait_sync)
+
     def bind_and_wait_port(self, lport = None, lport_bind_args = {},
                            sandbox = None):
         node = {
@@ -155,7 +195,9 @@ class OvnWorkload:
                        ifaceid = lport["name"])
         if internal and internal_vm:
             vsctl.bind_vm_port(lport)
-
+        if lport_bind_args.get("wait_up", False):
+            self.wait_up_port(lport, sandbox = sandbox,
+                              lport_bind_args = lport_bind_args)
 
     def create_lswitch_port(self, lswitch = None, lport_create_args = {},
                             iteration = 0):
