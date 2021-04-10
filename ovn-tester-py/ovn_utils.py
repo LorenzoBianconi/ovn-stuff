@@ -2,13 +2,14 @@ import paramiko
 from io import StringIO
 
 class SSH:
-    def __init__(self, node = {}, container = None):
+    def __init__(self, node = {}, container = None, log = False):
         ip = node.get("ip", "127.0.0.1")
         username = node.get("user", "root")
         password = node.get("password", "")
         port = node.get("port", 22)
 
         self.container = container
+        self.log = log
 
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -21,6 +22,9 @@ class SSH:
         else:
             command = cmd
 
+        if self.log:
+            print(command)
+
         ssh_stdin, ssh_stdout, ssh_stderr = self.ssh.exec_command(command)
         exit_code = ssh_stdout.channel.recv_exit_status()
 
@@ -32,8 +36,8 @@ class SSH:
                 print(out)
 
 class OvsVsctl:
-    def __init__(self, node = {}, container = None):
-        self.ssh = SSH(node = node, container = container)
+    def __init__(self, node = {}, container = None, log = False):
+        self.ssh = SSH(node = node, container = container, log = log)
 
     def run(self, cmd = "", prefix = "ovs-vsctl ", stdout = None):
         self.ssh.run(cmd = prefix + cmd, stdout = stdout)
@@ -67,8 +71,8 @@ class OvsVsctl:
             p=lport["name"], gw=lport["gw"]), prefix = "")
 
 class OvnNbctl:
-    def __init__(self, node = {}, container = None):
-        self.ssh = SSH(node = node, container = container)
+    def __init__(self, node = {}, container = None, log = False):
+        self.ssh = SSH(node = node, container = container, log = log)
 
     def run(self, cmd = "", stdout = None):
         self.ssh.run(cmd = "ovn-nbctl " + cmd, stdout = stdout)
@@ -130,8 +134,8 @@ class OvnNbctl:
        self.run("--wait={} sync".format(wait))
 
 class OvnSbctl:
-    def __init__(self, node = {}, container = None):
-        self.ssh = SSH(node = node, container = container)
+    def __init__(self, node = {}, container = None, log = False):
+        self.ssh = SSH(node = node, container = container, log = log)
 
     def run(self, cmd = "", stdout = None):
         self.ssh.run(cmd = "ovn-sbctl --no-leader-only " + cmd, stdout = stdout)

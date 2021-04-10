@@ -12,6 +12,7 @@ n_sandboxes = 4
 n_lports = 4
 sandboxes = [] # ovn sanbox list
 farm_list = [ "127.0.0.1" ]
+log = False
 
 controller = {
     "name": "ovn-central",
@@ -60,7 +61,7 @@ def run_test():
         "max_timeout_s": 10,
         "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
     }
-    ovn = ovn_workload.OvnWorkload(controller, sandboxes)
+    ovn = ovn_workload.OvnWorkload(controller, sandboxes, log = log)
     ovn.add_central(fake_multinode_args)
 
     # creat swith-per-node topology

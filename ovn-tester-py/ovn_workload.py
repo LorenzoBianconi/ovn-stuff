@@ -7,12 +7,15 @@ from randmac import RandMac
 from datetime import datetime
 
 class OvnWorkload:
-    def __init__(self, controller = None, sandboxes = None):
+    def __init__(self, controller = None, sandboxes = None, log = False):
         self.controller = controller
         self.sandboxes = sandboxes
-        self.nbctl = ovn_utils.OvnNbctl(controller, container = controller["name"])
+        self.nbctl = ovn_utils.OvnNbctl(controller,
+                                        container = controller["name"],
+                                        log = log)
         self.lswitches = []
         self.lports = []
+        self.log = log
 
     def add_central(self, fake_multinode_args = {}):
         print("***** creating central node *****")
@@ -35,7 +38,7 @@ class OvnWorkload:
         cmd = "cd {} && CHASSIS_COUNT=0 GW_COUNT=0 IP_HOST={} IP_CIDR={} IP_START={} {} {} CREATE_FAKE_VMS=no ./ovn_cluster.sh start".format(
                 ovn_fake_path, node_net, node_net_len, node_ip, monitor_cmd, cluster_db_cmd
             )
-        client = ovn_utils.SSH(self.controller)
+        client = ovn_utils.SSH(self.controller, log = self.log)
         client.run(cmd = cmd)
     
         time.sleep(5)
@@ -51,7 +54,8 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.SSH(node, container = sandbox["name"])
+        client = ovn_utils.SSH(node, container = sandbox["name"],
+                               log = self.log)
         client.run(cmd = cmd)
     
     def add_chassis_external_host(self, lnetwork_create_args = {}, iteration = 0):
@@ -65,7 +69,8 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.SSH(node, container = sandbox["name"])
+        client = ovn_utils.SSH(node, container = sandbox["name"],
+                               log = self.log)
         client.run(cmd = "ip link add veth0 type veth peer name veth1")
         client.run(cmd = "ip link add veth0 type veth peer name veth1")
         client.run(cmd = "ip netns add ext-ns")
@@ -107,7 +112,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.SSH(node)
+        client = ovn_utils.SSH(node, log = self.log)
         client.run(cmd)
 
     def connect_chassis_node(self, fake_multinode_args = {}, iteration = 0):
@@ -129,7 +134,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.SSH(node)
+        client = ovn_utils.SSH(node, log = self.log)
         client.run(cmd = cmd)
 
     def wait_chassis_node(self, fake_multinode_args = {}, iteration = 0,
@@ -138,7 +143,8 @@ class OvnWorkload:
         max_timeout_s = fake_multinode_args.get("max_timeout_s")
         for i in range(0, max_timeout_s * 10):
             sbctl = ovn_utils.OvnSbctl(self.controller,
-                                       container = self.controller["name"])
+                                       container = self.controller["name"],
+                                       log = self.log)
             if sbctl.chassis_bound(chassis = sandbox["name"]):
                 break
             time.sleep(0.1)
@@ -148,7 +154,8 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.SSH(node, container = sandbox["name"])
+        client = ovn_utils.SSH(node, container = sandbox["name"],
+                               log = self.log)
         while True:
             try:
                 cmd = "ip netns exec {} ping -q -c 1 -W 0.1 {}".format(
@@ -189,7 +196,8 @@ class OvnWorkload:
         }
         internal = lport_bind_args.get("internal", False)
         internal_vm = lport_bind_args.get("internal_vm", True)
-        vsctl = ovn_utils.OvsVsctl(node = node, container = sandbox["name"])
+        vsctl = ovn_utils.OvsVsctl(node = node, container = sandbox["name"],
+                                   log = self.log)
         # add ovs port
         vsctl.add_port(lport["name"], "br-int", internal = internal,
                        ifaceid = lport["name"])
