@@ -73,9 +73,16 @@ class OvsVsctl:
 class OvnNbctl:
     def __init__(self, node = {}, container = None, log = False):
         self.ssh = SSH(node = node, container = container, log = log)
+        self.socket = ""
+
+    def __del__(self):
+        self.stop_daemon()
 
     def run(self, cmd = "", stdout = None):
-        self.ssh.run(cmd = "ovn-nbctl " + cmd, stdout = stdout)
+        prefix = "ovn-nbctl "
+        if len(self.socket):
+            prefix = prefix + "-u " + self.socket + " "
+        self.ssh.run(cmd = prefix + cmd, stdout = stdout)
 
     def lr_add(self, name = ""):
         self.run(cmd = "lr-add {}".format(name))
@@ -132,6 +139,31 @@ class OvnNbctl:
 
     def sync(self, wait = "hv"):
        self.run("--wait={} sync".format(wait))
+
+    def start_daemon(self, nbctld_config = {}):
+        cmd = "--detach --pidfile --log-file"
+        if "remote" in nbctld_config:
+            ovn_remote = nbctld_config["remote"]
+            prot = nbctld_config["prot"]
+            central_ips = [ip.strip() for ip in ovn_remote.split('-')]
+            # If there is only one ip, then we can use unixctl socket.
+            if len(central_ips) > 1:
+                remote = ",".join(["{}:{}:6641".format(prot, r)
+                                  for r in central_ips])
+                cmd += "--db=" + remote
+                if prot == "ssl":
+                    cmd += "-p {} -c {} -C {}".format(
+                        nbctld_config["privkey"], nbctld_config["cert"],
+                        nbctld_config["cacert"])
+
+        stdout = StringIO()
+        self.run(cmd = cmd, stdout = stdout)
+        self.socket = stdout.getvalue().rstrip()
+
+    def stop_daemon(self):
+        if len(self.socket):
+            cmd = "ovs-appctl -t {} exit".format(self.socket)
+            self.ssh.run(cmd = cmd)
 
 class OvnSbctl:
     def __init__(self, node = {}, container = None, log = False):

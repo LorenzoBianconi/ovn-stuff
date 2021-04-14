@@ -21,6 +21,10 @@ controller = {
     "password": ""
 }
 
+nbctld_config = {
+    "daemon": True,
+}
+
 def create_sandbox(sandbox_create_args = {}, iteration = 0):
     amount = sandbox_create_args.get("amount", 1)
 
@@ -62,7 +66,7 @@ def run_test():
         "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
     }
     ovn = ovn_workload.OvnWorkload(controller, sandboxes, log = log)
-    ovn.add_central(fake_multinode_args)
+    ovn.add_central(fake_multinode_args, nbctld_config = nbctld_config)
 
     # creat swith-per-node topology
     lnetwork_create_args = {

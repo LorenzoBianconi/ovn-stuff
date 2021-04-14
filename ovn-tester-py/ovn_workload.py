@@ -17,7 +17,7 @@ class OvnWorkload:
         self.lports = []
         self.log = log
 
-    def add_central(self, fake_multinode_args = {}):
+    def add_central(self, fake_multinode_args = {}, nbctld_config = {}):
         print("***** creating central node *****")
     
         node_net = fake_multinode_args.get("node_net")
@@ -40,6 +40,9 @@ class OvnWorkload:
             )
         client = ovn_utils.SSH(self.controller, log = self.log)
         client.run(cmd = cmd)
+
+        if nbctld_config.get("daemon", False):
+            self.nbctl.start_daemon(nbctld_config = nbctld_config)
     
         time.sleep(5)
 
