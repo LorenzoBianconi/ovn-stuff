@@ -20,7 +20,33 @@ controller = {
     "user": "root",
     "password": ""
 }
-
+fake_multinode_args = {
+    "node_net": "192.16.0.0",
+    "node_net_len": "16",
+    "node_ip": "192.16.0.1",
+    "ovn_cluster_db": False,
+    "central_ip": "192.16.0.1",
+    "sb_proto": "ssl",
+    "max_timeout_s": 10,
+    "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
+}
+lnetwork_create_args = {
+    "start_ext_cidr": "3.0.0.0/16"
+}
+lswitch_create_args = {
+    "start_cidr" : "16.0.0.0/16",
+    "nlswitch": n_sandboxes,
+}
+lport_bind_args = {
+    "internal" : True,
+    "wait_up": True,
+    "wait_sync" : "ping",
+}
+lport_create_args = {
+    "network_policy_size": 2,
+    "name_space_size": 2,
+    "create_acls": True
+}
 nbctld_config = {
     "daemon": True,
 }
@@ -55,23 +81,10 @@ def run_test():
     print(yaml.dump(sandboxes))
 
     # start ovn-northd on ovn central
-    fake_multinode_args = {
-        "node_net": "192.16.0.0",
-        "node_net_len": "16",
-        "node_ip": "192.16.0.1",
-        "ovn_cluster_db": False,
-        "central_ip": "192.16.0.1",
-        "sb_proto": "ssl",
-        "max_timeout_s": 10,
-        "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
-    }
     ovn = ovn_workload.OvnWorkload(controller, sandboxes, log = log)
     ovn.add_central(fake_multinode_args, nbctld_config = nbctld_config)
 
     # creat swith-per-node topology
-    lnetwork_create_args = {
-        "start_ext_cidr": "3.0.0.0/16"
-    }
     for i in range(n_sandboxes):
         ovn.add_chassis_node(fake_multinode_args, iteration = i)
         if lnetwork_create_args.get('gw_router_per_network', False):
@@ -82,24 +95,9 @@ def run_test():
         ovn.connect_chassis_node(fake_multinode_args, iteration = i)
         ovn.wait_chassis_node(fake_multinode_args, iteration = i)
 
-    lswitch_create_args = {
-        "start_cidr" : "16.0.0.0/16",
-        "nlswitch": n_sandboxes,
-    }
-    lport_bind_args = {
-        "internal" : True,
-        "wait_up": True,
-        "wait_sync" : "ping",
-    }
     # create ovn topology
     ovn.create_routed_network(lswitch_create_args = lswitch_create_args,
                               lport_bind_args = lport_bind_args)
-
-    lport_create_args = {
-        "network_policy_size": 2,
-        "name_space_size": 2,
-        "create_acls": True
-    }
     # create ovn logical ports
     for i in range(n_lports):
         ovn.create_routed_lport(lport_create_args = lport_create_args,
