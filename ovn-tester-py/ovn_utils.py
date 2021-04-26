@@ -105,13 +105,21 @@ class OvnNbctl:
             cmd = cmd + " -- lsp-set-options {} router-port={}".format(name, router_port)
             self.run(cmd = cmd)
         elif len(mac) or len(ip):
-            cmd = "lsp-set-addresses {} \"{} {}\"".format(name, mac, ip)
+            cmd = "lsp-set-addresses {} \"".format(name)
+            if len(mac):
+                cmd = cmd + mac + " "
+            if len(ip):
+                cmd = cmd + ip
+            cmd = cmd + "\""
             self.run(cmd = cmd)
         stdout = StringIO()
         cmd = "get logical_switch_port {} _uuid".format(name)
         self.run(cmd = cmd, stdout = stdout)
         uuid = stdout.getvalue()
         return { "name" : name, "mac" : mac, "ip" : ip, "gw" : gw , "uuid" : uuid }
+
+    def ls_port_set_set_options(self, name = "", options = ""):
+        self.run("lsp-set-options {} {}".format(name, options))
 
     def port_group_add(self, name = "", lport = None, create = True):
         if (create):
@@ -133,6 +141,22 @@ class OvnNbctl:
                                                             str(priority), match,
                                                             verdict)
         self.run(cmd = cmd)
+
+    def route_add(self, name = "", network = "0.0.0.0/0", gw = "",
+                  policy = None):
+        if policy:
+            cmd = "--policy={} lr-route-add {} {} {}".format(policy, name,
+                                                             network, gw)
+        else:
+            cmd = "lr-route-add {} {} {}".format(name, network, gw)
+        self.run(cmd = cmd)
+
+    def nat_add(self, name, nat_type = "snat", external_ip = "",
+                logical_ip = ""):
+
+       cmd = "lr-nat-add {} {} {} {}".format(name, nat_type, external_ip,
+                                             logical_ip)
+       self.run(cmd = cmd)
 
     def wait_until(self, cmd = ""):
         self.run("wait-until " + cmd)

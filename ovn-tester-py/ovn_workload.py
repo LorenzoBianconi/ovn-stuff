@@ -3,6 +3,7 @@ import time
 import netaddr
 import random
 import string
+import copy
 from randmac import RandMac
 from datetime import datetime
 
@@ -231,14 +232,15 @@ class OvnWorkload:
                                               ip = ip_mask, gw = gw)
         return lswitch_port
 
-    def create_lswitch(self, lswitch_create_args = {}, iteration = 0):
+    def create_lswitch(self, prefix = "lswitch_", lswitch_create_args = {},
+                       iteration = 0):
         start_cidr = lswitch_create_args.get("start_cidr", "")
         if start_cidr:
             start_cidr = netaddr.IPNetwork(start_cidr)
             cidr = start_cidr.next(iteration)
-            name = "lswitch_%s" % cidr
+            name = prefix + str(cidr)
         else:
-            name = 'lswitch_'.join(random.choice(string.ascii_letters) for i in range(10))
+            name = prefix.join(random.choice(string.ascii_letters) for i in range(10))
 
         print("***** creating lswitch {} *****".format(name))
         lswitch = self.nbctl.ls_add(name)
@@ -257,7 +259,77 @@ class OvnWorkload:
                                               "rp-" + lswitch["name"],
                                               lswitch["name"])
 
+    def create_phynet(self, lswitch = None, physnet = ""):
+        port = "provnet-{}".format(lswitch["name"])
+        print("***** creating phynet {} *****".format(port))
+
+        self.nbctl.ls_port_add(lswitch["name"], port, ip = "unknown")
+        self.nbctl.ls_port_set_set_options(port, "network_name=%s" % physnet)
+
+    def connect_gateway_router(self, lrouter = None, lswitch = None,
+                               lswitch_create_args = {},
+                               lnetwork_create_args = {}, gw_cidr = None,
+                               ext_cidr = None, sandbox = None):
+
+        # Create a join switch to connect the GW router to the cluster router.
+        lswitch_args = copy.copy(lswitch_create_args)
+        lswitch_args["start_cidr"] = gw_cidr if str(gw_cidr) else ""
+        join_switch = self.create_lswitch(prefix = "join_",
+                                          lswitch_create_args = lswitch_args)
+
+        # Create ports between the join switch and the cluster router.
+        self.connect_lswitch_to_router(lrouter, join_switch)
+
+        # Create a gateway router and bind it to the local chassis.
+        gw_router = self.nbctl.lr_add("grouter_" + str(gw_cidr))
+        self.nbctl.run("set Logical_Router {} options:chassis={}".format(
+            gw_router["name"], sandbox["name"]))
+
+        # Create ports between the join switch and the gateway router.
+        gr_gw = netaddr.IPAddress(gw_cidr.last - 2) if gw_cidr else None
+        grouter_port_join_switch = "grpj-" + str(gw_cidr) if gw_cidr else "grpj"
+        grouter_port_join_switch_ip = '{}/{}'.format(gr_gw, gw_cidr.prefixlen)
+        self.nbctl.lr_port_add(gw_router["name"], grouter_port_join_switch,
+                               RandMac(), grouter_port_join_switch_ip)
+        self.nbctl.ls_port_add(join_switch["name"],
+                               "jrpg-" + join_switch["name"],
+                               grouter_port_join_switch)
+
+        # Create an external switch connecting the gateway router to the
+        # physnet.
+        lswitch_args["start_cidr"] = ext_cidr if str(ext_cidr) else ""
+        ext_switch = self.create_lswitch(prefix = "ext_",
+                                         lswitch_create_args = lswitch_args)
+        self.connect_lswitch_to_router(gw_router, ext_switch)
+        self.create_phynet(ext_switch,
+                           lnetwork_create_args.get("physnet", "providernet"))
+
+        cluster_cidr = lnetwork_create_args.get("cluster_cidr", "")
+        if cluster_cidr and gw_cidr:
+            # Route for traffic entering the cluster.
+            rp_gw = netaddr.IPAddress(gw_cidr.last - 1)
+            self.nbctl.route_add(gw_router["name"], cluster_cidr, str(rp_gw))
+
+        if ext_cidr:
+            # Default route to get out of cluster via physnet.
+            gr_def_gw = netaddr.IPAddress(ext_cidr.last - 2)
+            self.nbctl.route_add(gw_router["name"], gw = str(gr_def_gw))
+
+        # Force return traffic to return on the same node.
+        self.nbctl.run("set Logical_Router {} options:lb_force_snat_ip={}".format(
+            gw_router["name"], str(gr_gw)))
+
+        # Route for traffic that needs to exit the cluster
+        # (via gw router).
+        self.nbctl.route_add(lrouter["name"], str(lswitch["cidr"]),
+                             str(gr_gw), policy="src-ip")
+
+        # SNAT traffic leaving the cluster.
+        self.nbctl.nat_add(gw_router["name"], external_ip = str(gr_gw),
+                           logical_ip = cluster_cidr)
+
     def create_routed_network(self, lswitch_create_args = {},
+                              lnetwork_create_args = {},
                               lport_bind_args = {}):
         # create logical router
         name = ''.join(random.choice(string.ascii_letters) for i in range(10))
@@ -265,7 +337,9 @@ class OvnWorkload:
 
         # create logical switches
         for i in range(lswitch_create_args.get("nlswitch", 10)):
-            lswitch = self.create_lswitch(lswitch_create_args, i)
+            lswitch = self.create_lswitch(
+                    lswitch_create_args = lswitch_create_args,
+                    iteration = i)
             self.lswitches.append(lswitch)
             self.connect_lswitch_to_router(router, lswitch)
             lport = self.create_lswitch_port(lswitch, iteration = 0)
@@ -273,6 +347,23 @@ class OvnWorkload:
             sandbox = self.sandboxes[i % len(self.sandboxes)]
             self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
                                     sandbox = sandbox)
+
+        if lnetwork_create_args.get('gw_router_per_network', False):
+            start_ext_cidr = lnetwork_create_args.get('start_ext_cidr', '')
+            ext_cidr = None
+            start_gw_cidr = lnetwork_create_args.get('start_gw_cidr', '')
+            gw_cidr = None
+
+            for i, lswitch in enumerate(self.lswitches):
+                if start_gw_cidr:
+                    gw_cidr = netaddr.IPNetwork(start_gw_cidr).next(i)
+                if start_ext_cidr:
+                    ext_cidr = netaddr.IPNetwork(start_ext_cidr).next(i)
+                self.connect_gateway_router(lrouter = router, lswitch = lswitch,
+                                            lswitch_create_args = lswitch_create_args,
+                                            lnetwork_create_args = lnetwork_create_args,
+                                            gw_cidr = gw_cidr, ext_cidr = ext_cidr,
+                                            sandbox = self.sandboxes[i])
 
     def create_acl(self, lswitch = None, lport = None, acl_create_args = {}):
         print("***** creating acl on {} *****".format(lport["name"]))

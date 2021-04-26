@@ -31,7 +31,11 @@ fake_multinode_args = {
     "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
 }
 lnetwork_create_args = {
-    "start_ext_cidr": "3.0.0.0/16"
+    "start_ext_cidr": "3.0.0.0/16",
+    "gw_router_per_network": True,
+    "start_gw_cidr": "2.0.0.0/16",
+    "start_ext_cidr": "3.0.0.0/16",
+    "cluster_cidr": "16.0.0.0/4"
 }
 lswitch_create_args = {
     "start_cidr" : "16.0.0.0/16",
@@ -97,6 +101,7 @@ def run_test():
 
     # create ovn topology
     ovn.create_routed_network(lswitch_create_args = lswitch_create_args,
+                              lnetwork_create_args = lnetwork_create_args,
                               lport_bind_args = lport_bind_args)
     # create ovn logical ports
     for i in range(n_lports):
