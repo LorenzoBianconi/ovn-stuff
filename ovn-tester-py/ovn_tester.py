@@ -24,8 +24,8 @@ fake_multinode_args = {
     "node_net": "192.16.0.0",
     "node_net_len": "16",
     "node_ip": "192.16.0.1",
-    "ovn_cluster_db": False,
-    "central_ip": "192.16.0.1",
+    "ovn_cluster_db": True,
+    "central_ip": "192.16.0.1-192.16.0.2-192.16.0.3",
     "sb_proto": "ssl",
     "max_timeout_s": 10,
     "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
@@ -85,7 +85,9 @@ def run_test():
     print(yaml.dump(sandboxes))
 
     # start ovn-northd on ovn central
-    ovn = ovn_workload.OvnWorkload(controller, sandboxes, log = log)
+    ovn = ovn_workload.OvnWorkload(controller, sandboxes,
+            fake_multinode_args.get("ovn_cluster_db", False),
+            log = log)
     ovn.add_central(fake_multinode_args, nbctld_config = nbctld_config)
 
     # creat swith-per-node topology

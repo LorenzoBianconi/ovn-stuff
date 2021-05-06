@@ -8,8 +8,11 @@ from randmac import RandMac
 from datetime import datetime
 
 class OvnWorkload:
-    def __init__(self, controller = None, sandboxes = None, log = False):
+    def __init__(self, controller = None, sandboxes = None,
+                 cluster_db = False, log = False):
         self.controller = controller
+        if cluster_db:
+            self.controller["name"] = controller["name"] + "-1"
         self.sandboxes = sandboxes
         self.nbctl = ovn_utils.OvnNbctl(controller,
                                         container = controller["name"],
