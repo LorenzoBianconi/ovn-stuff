@@ -71,7 +71,7 @@ def create_sandbox(sandbox_create_args = {}, iteration = 0):
 
     for i in range(amount):
         sandbox = {
-                "farm": farm_list[ i % len(farm_list) ],
+                "farm": farm_list[ (i + iteration) % len(farm_list) ],
                 "name" : "ovn-chassis-%s" % iteration
         }
         sandboxes.append(sandbox)
