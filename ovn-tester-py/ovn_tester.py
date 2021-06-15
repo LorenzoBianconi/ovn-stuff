@@ -8,53 +8,31 @@ import time
 import yaml
 import ovn_workload
 
-n_sandboxes = 4
-n_lports = 4
 sandboxes = [] # ovn sanbox list
 farm_list = []
-log = False
 
-controller = {
+run_args = {
+}
+controller_args = {
 }
 fake_multinode_args = {
-    "node_net": "192.16.0.0",
-    "node_net_len": "16",
-    "node_ip": "192.16.0.1",
-    "ovn_cluster_db": True,
-    "central_ip": "192.16.0.1-192.16.0.2-192.16.0.3",
-    "sb_proto": "ssl",
-    "max_timeout_s": 10,
-    "cluster_cmd_path": "/root/ovn-heater/runtime/ovn-fake-multinode"
 }
 lnetwork_create_args = {
-    "start_ext_cidr": "3.0.0.0/16",
-    "gw_router_per_network": True,
-    "start_gw_cidr": "2.0.0.0/16",
-    "start_ext_cidr": "3.0.0.0/16",
-    "cluster_cidr": "16.0.0.0/4"
 }
 lswitch_create_args = {
-    "start_cidr" : "16.0.0.0/16",
-    "nlswitch": n_sandboxes,
 }
 lport_bind_args = {
-    "internal" : True,
-    "wait_up": True,
-    "wait_sync" : "ping",
 }
 lport_create_args = {
-    "network_policy_size": 2,
-    "name_space_size": 2,
-    "create_acls": True
 }
 nbctld_config = {
-    "daemon": True,
 }
 
 def usage(name):
     print("""
-{} PHYSICAL_DEPLOYMENT CLUSTERED_DB
+{} PHYSICAL_DEPLOYMENT TEST_CONF
 where PHYSICAL_DEPLOYMENT is the YAML file defining the deployment.
+where TEST_CONF is the YAML file defining the test parameters.
 """.format(name), file=sys.stderr)
 
 def read_physical_deployment(deployment):
@@ -65,10 +43,53 @@ def read_physical_deployment(deployment):
             farm_list.append(worker)
 
         central_config = config['central-node']
-        controller['ip'] = central_config['name']
-        controller['user'] = central_config.get('user', 'root')
-        controller['password'] = central_config.get('password', '')
-        controller['name'] = central_config.get('prefix', 'ovn-central')
+        controller_args['ip'] = central_config['name']
+        controller_args['user'] = central_config.get('user', 'root')
+        controller_args['password'] = central_config.get('password', '')
+        controller_args['name'] = central_config.get('prefix', 'ovn-central')
+
+def read_test_conf(test_conf):
+    with open(test_conf, 'r') as yaml_file:
+        config = yaml.safe_load(yaml_file)
+
+        run_config = config['run_args']
+        run_args['n_sandboxes'] = run_config['n_sandboxes'] # Total number of fake hvs
+        run_args['n_lports'] = run_config['n_lports'] # Total number of pods
+        run_args['log'] = run_config['log']
+
+        fake_multinode_config = config['fake_multinode_args']
+        fake_multinode_args['node_net'] = fake_multinode_config['node_net']
+        fake_multinode_args['node_net_len'] = fake_multinode_config['node_net_len']
+        fake_multinode_args['node_ip'] = fake_multinode_config['node_ip']
+        fake_multinode_args['ovn_cluster_db'] = fake_multinode_config['ovn_cluster_db']
+        fake_multinode_args['central_ip'] = fake_multinode_config['central_ip']
+        fake_multinode_args['sb_proto'] = fake_multinode_config['sb_proto']
+        fake_multinode_args['max_timeout_s'] = fake_multinode_config['max_timeout_s']
+        fake_multinode_args['cluster_cmd_path'] = fake_multinode_config['cluster_cmd_path']
+
+        lnetwork_config = config['lnetwork_create_args']
+        lnetwork_create_args['start_ext_cidr'] = lnetwork_config['start_ext_cidr']
+        lnetwork_create_args['gw_router_per_network'] = lnetwork_config['gw_router_per_network']
+        lnetwork_create_args['start_gw_cidr'] = lnetwork_config['start_gw_cidr']
+        lnetwork_create_args['start_ext_cidr'] = lnetwork_config['start_ext_cidr']
+        lnetwork_create_args['cluster_cidr'] = lnetwork_config['cluster_cidr']
+
+        lswitch_config = config['lswitch_create_args']
+        lswitch_create_args['start_cidr'] = lswitch_config['start_cidr']
+        lswitch_create_args['nlswitch'] = run_args['n_sandboxes']
+
+        lport_bind_config = config['lport_bind_args']
+        lport_bind_args['internal'] = lport_bind_config['internal']
+        lport_bind_args['wait_up'] = lport_bind_config['wait_up']
+        lport_bind_args['wait_sync'] = lport_bind_config['wait_sync']
+
+        lport_create_config = config['lport_create_args']
+        lport_create_args['network_policy_size'] = lport_create_config['network_policy_size']
+        lport_create_args['name_space_size'] = lport_create_config['name_space_size']
+        lport_create_args['create_acls'] = lport_create_config['create_acls']
+
+        nbctld_configuration = config['nbctld_config']
+        nbctld_config['daemon'] = nbctld_configuration['daemon']
 
 def create_sandbox(sandbox_create_args = {}, iteration = 0):
     amount = sandbox_create_args.get("amount", 1)
@@ -93,26 +114,26 @@ def create_sandbox(sandbox_create_args = {}, iteration = 0):
 
 def run_test():
     # create sandox list
-    for i in range(n_sandboxes):
+    for i in range(run_args['n_sandboxes']):
         create_sandbox(iteration = i)
 
     print("***** creating following sanboxes *****")
     print(yaml.dump(sandboxes))
 
     # start ovn-northd on ovn central
-    ovn = ovn_workload.OvnWorkload(controller, sandboxes,
+    ovn = ovn_workload.OvnWorkload(controller_args, sandboxes,
             fake_multinode_args.get("ovn_cluster_db", False),
-            log = log)
+            log = run_args['log'])
     ovn.add_central(fake_multinode_args, nbctld_config = nbctld_config)
 
     # creat swith-per-node topology
-    for i in range(n_sandboxes):
+    for i in range(run_args['n_sandboxes']):
         ovn.add_chassis_node(fake_multinode_args, iteration = i)
         if lnetwork_create_args.get('gw_router_per_network', False):
             ovn.add_chassis_node_localnet(fake_multinode_args, iteration = i)
             ovn.add_chassis_external_host(lnetwork_create_args, iteration = i)
 
-    for i in range(n_sandboxes):
+    for i in range(run_args['n_sandboxes']):
         ovn.connect_chassis_node(fake_multinode_args, iteration = i)
         ovn.wait_chassis_node(fake_multinode_args, iteration = i)
 
@@ -121,17 +142,18 @@ def run_test():
                               lnetwork_create_args = lnetwork_create_args,
                               lport_bind_args = lport_bind_args)
     # create ovn logical ports
-    for i in range(n_lports):
+    for i in range(run_args['n_lports']):
         ovn.create_routed_lport(lport_create_args = lport_create_args,
                                 lport_bind_args = lport_bind_args,
                                 iteration = i)
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 3:
         usage(sys.argv[0])
         sys.exit(1)
 
     # parse configuration
     read_physical_deployment(sys.argv[1])
+    read_test_conf(sys.argv[2])
     # execute the test
     sys.exit(run_test())
