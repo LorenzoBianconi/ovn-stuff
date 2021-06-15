@@ -345,19 +345,13 @@ class OvnWorkload:
                     iteration = i)
             self.lswitches.append(lswitch)
             self.connect_lswitch_to_router(router, lswitch)
-            lport = self.create_lswitch_port(lswitch, iteration = 0)
-            self.lports.append(lport)
-            sandbox = self.sandboxes[i % len(self.sandboxes)]
-            self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
-                                    sandbox = sandbox)
 
-        if lnetwork_create_args.get('gw_router_per_network', False):
-            start_ext_cidr = lnetwork_create_args.get('start_ext_cidr', '')
-            ext_cidr = None
-            start_gw_cidr = lnetwork_create_args.get('start_gw_cidr', '')
-            gw_cidr = None
+            if lnetwork_create_args.get('gw_router_per_network', False):
+                start_ext_cidr = lnetwork_create_args.get('start_ext_cidr', '')
+                ext_cidr = None
+                start_gw_cidr = lnetwork_create_args.get('start_gw_cidr', '')
+                gw_cidr = None
 
-            for i, lswitch in enumerate(self.lswitches):
                 if start_gw_cidr:
                     gw_cidr = netaddr.IPNetwork(start_gw_cidr).next(i)
                 if start_ext_cidr:
@@ -367,6 +361,12 @@ class OvnWorkload:
                                             lnetwork_create_args = lnetwork_create_args,
                                             gw_cidr = gw_cidr, ext_cidr = ext_cidr,
                                             sandbox = self.sandboxes[i])
+
+            lport = self.create_lswitch_port(lswitch, iteration = 0)
+            self.lports.append(lport)
+            sandbox = self.sandboxes[i % len(self.sandboxes)]
+            self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,
+                                    sandbox = sandbox)
 
     def create_acl(self, lswitch = None, lport = None, acl_create_args = {}):
         print("***** creating acl on {} *****".format(lport["name"]))
