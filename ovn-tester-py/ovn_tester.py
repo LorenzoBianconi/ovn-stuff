@@ -11,14 +11,10 @@ import ovn_workload
 n_sandboxes = 4
 n_lports = 4
 sandboxes = [] # ovn sanbox list
-farm_list = [ "127.0.0.1" ]
+farm_list = []
 log = False
 
 controller = {
-    "name": "ovn-central",
-    "ip": "127.0.0.1",
-    "user": "root",
-    "password": ""
 }
 fake_multinode_args = {
     "node_net": "192.16.0.0",
@@ -54,6 +50,25 @@ lport_create_args = {
 nbctld_config = {
     "daemon": True,
 }
+
+def usage(name):
+    print("""
+{} PHYSICAL_DEPLOYMENT CLUSTERED_DB
+where PHYSICAL_DEPLOYMENT is the YAML file defining the deployment.
+""".format(name), file=sys.stderr)
+
+def read_physical_deployment(deployment):
+    with open(deployment, 'r') as yaml_file:
+        config = yaml.safe_load(yaml_file)
+
+        for worker in config['worker-nodes']:
+            farm_list.append(worker)
+
+        central_config = config['central-node']
+        controller['ip'] = central_config['name']
+        controller['user'] = central_config.get('user', 'root')
+        controller['password'] = central_config.get('password', '')
+        controller['name'] = central_config.get('prefix', 'ovn-central')
 
 def create_sandbox(sandbox_create_args = {}, iteration = 0):
     amount = sandbox_create_args.get("amount", 1)
@@ -112,4 +127,11 @@ def run_test():
                                 iteration = i)
 
 if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        usage(sys.argv[0])
+        sys.exit(1)
+
+    # parse configuration
+    read_physical_deployment(sys.argv[1])
+    # execute the test
     sys.exit(run_test())
