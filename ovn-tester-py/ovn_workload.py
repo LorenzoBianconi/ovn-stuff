@@ -42,7 +42,7 @@ class OvnWorkload:
         cmd = "cd {} && CHASSIS_COUNT=0 GW_COUNT=0 IP_HOST={} IP_CIDR={} IP_START={} {} {} CREATE_FAKE_VMS=no ./ovn_cluster.sh start".format(
                 ovn_fake_path, node_net, node_net_len, node_ip, monitor_cmd, cluster_db_cmd
             )
-        client = ovn_utils.RemoteConn(self.controller, log = self.log)
+        client = ovn_utils.RemoteConn(node = self.controller, log = self.log)
         client.run(cmd = cmd)
 
         if nbctld_config.get("daemon", False):
@@ -61,7 +61,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.RemoteConn(node, container = sandbox["name"],
+        client = ovn_utils.RemoteConn(node = node, container = sandbox["name"],
                                       log = self.log)
         client.run(cmd = cmd)
     
@@ -76,7 +76,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.RemoteConn(node, container = sandbox["name"],
+        client = ovn_utils.RemoteConn(node = node, container = sandbox["name"],
                                       log = self.log)
         client.run(cmd = "ip link add veth0 type veth peer name veth1")
         client.run(cmd = "ip link add veth0 type veth peer name veth1")
@@ -119,7 +119,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.RemoteConn(node, log = self.log)
+        client = ovn_utils.RemoteConn(node = node, log = self.log)
         client.run(cmd)
 
     def connect_chassis_node(self, fake_multinode_args = {}, iteration = 0):
@@ -141,7 +141,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.RemoteConn(node, log = self.log)
+        client = ovn_utils.RemoteConn(node = node, log = self.log)
         client.run(cmd = cmd)
 
     def wait_chassis_node(self, fake_multinode_args = {}, iteration = 0,
@@ -161,7 +161,7 @@ class OvnWorkload:
         node = {
             "ip": sandbox["farm"],
         }
-        client = ovn_utils.RemoteConn(node, container = sandbox["name"],
+        client = ovn_utils.RemoteConn(node = node, container = sandbox["name"],
                                       log = self.log)
         while True:
             try:

@@ -25,8 +25,8 @@ class SSH:
                 print(out)
 
 class RemoteConn:
-    def __init__(self, node = {}, container = None, log = False):
-        self.ssh = SSH(node)
+    def __init__(self, node = {}, ssh = None, container = None, log = False):
+        self.ssh = SSH(node) if not ssh else ssh
         self.container = container
         self.log = log
 
@@ -42,8 +42,9 @@ class RemoteConn:
         self.ssh.run(cmd = command, stdout = stdout)
 
 class OvsVsctl:
-    def __init__(self, node = {}, container = None, log = False):
-        self.ssh = RemoteConn(node = node, container = container, log = log)
+    def __init__(self, node = {}, ssh = None, container = None, log = False):
+        self.ssh = RemoteConn(node = node, ssh = ssh,
+                              container = container, log = log)
 
     def run(self, cmd = "", prefix = "ovs-vsctl ", stdout = None):
         self.ssh.run(cmd = prefix + cmd, stdout = stdout)
