@@ -63,6 +63,7 @@ def read_test_conf(test_conf):
         fake_multinode_args['node_net_len'] = fake_multinode_config['node_net_len']
         fake_multinode_args['node_ip'] = fake_multinode_config['node_ip']
         fake_multinode_args['ovn_cluster_db'] = fake_multinode_config['ovn_cluster_db']
+        fake_multinode_args['ovn_monitor_all'] = fake_multinode_config.get('ovn_monitor_all')
         fake_multinode_args['central_ip'] = fake_multinode_config['central_ip']
         fake_multinode_args['sb_proto'] = fake_multinode_config['sb_proto']
         fake_multinode_args['max_timeout_s'] = fake_multinode_config['max_timeout_s']
