@@ -1,6 +1,9 @@
 import paramiko
 from io import StringIO
 
+class SSHError(Exception):
+    pass
+
 class SSH:
     def __init__(self, node = {}):
         ip = node.get("ip", "127.0.0.1")
@@ -15,7 +18,7 @@ class SSH:
 
     def run(self, cmd = "", stdout = None):
         ssh_stdin, ssh_stdout, ssh_stderr = self.ssh.exec_command(cmd)
-        exit_code = ssh_stdout.channel.recv_exit_status()
+        exit_status = ssh_stdout.channel.recv_exit_status()
 
         if stdout:
             stdout.write(ssh_stdout.read().decode('ascii'))
@@ -23,6 +26,11 @@ class SSH:
             out = ssh_stdout.read().decode().strip()
             if len(out):
                 print(out)
+        if exit_status != 0:
+            print(ssh_stderr.read().decode())
+            details = "Command '{}' failed with exit_status {}.".format(
+                cmd, exit_status)
+            raise SSHError(details)
 
 class RemoteConn:
     def __init__(self, node = {}, ssh = None, container = None, log = False):
