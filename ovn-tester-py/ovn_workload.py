@@ -157,7 +157,7 @@ class OvnWorkload:
             try:
                 cmd = "ip netns exec {} ping -q -c 1 -W 0.1 {}".format(
                         lport["name"], dest)
-                client.run(cmd = cmd)
+                client.run(cmd = cmd, raise_on_error = True)
                 break
             except:
                 pass

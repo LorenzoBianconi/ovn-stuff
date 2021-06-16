@@ -16,7 +16,7 @@ class SSH:
         self.ssh.connect(ip, username = username, password = password,
                          port = port)
 
-    def run(self, cmd = "", stdout = None):
+    def run(self, cmd = "", stdout = None, raise_on_error = False):
         ssh_stdin, ssh_stdout, ssh_stderr = self.ssh.exec_command(cmd)
         exit_status = ssh_stdout.channel.recv_exit_status()
 
@@ -26,7 +26,7 @@ class SSH:
             out = ssh_stdout.read().decode().strip()
             if len(out):
                 print(out)
-        if exit_status != 0:
+        if exit_status != 0 and raise_on_error:
             print(ssh_stderr.read().decode())
             details = "Command '{}' failed with exit_status {}.".format(
                 cmd, exit_status)
@@ -38,7 +38,7 @@ class RemoteConn:
         self.container = container
         self.log = log
 
-    def run(self, cmd = "", stdout = None):
+    def run(self, cmd = "", stdout = None, raise_on_error = False):
         if self.container:
             command = 'docker exec ' + self.container + ' ' + cmd
         else:
@@ -47,7 +47,8 @@ class RemoteConn:
         if self.log:
             print(command)
 
-        self.ssh.run(cmd = command, stdout = stdout)
+        self.ssh.run(cmd = command, stdout = stdout,
+                     raise_on_error = raise_on_error)
 
 class OvsVsctl:
     def __init__(self, node = {}, ssh = None, container = None, log = False):
