@@ -58,10 +58,7 @@ class OvnWorkload:
         cmd = "ovs-vsctl -- set open_vswitch . external-ids:ovn-bridge-mappings={}:br-ex".format(
             fake_multinode_args.get("physnet", "providernet")
         )
-        node = {
-            "ip": sandbox["farm"],
-        }
-        client = ovn_utils.RemoteConn(node = node, container = sandbox["name"],
+        client = ovn_utils.RemoteConn(ssh = sandbox["ssh"], container = sandbox["name"],
                                       log = self.log)
         client.run(cmd = cmd)
     
@@ -73,10 +70,7 @@ class OvnWorkload:
         gw_ip = netaddr.IPAddress(ext_cidr.last - 1)
         host_ip = netaddr.IPAddress(ext_cidr.last - 2)
     
-        node = {
-            "ip": sandbox["farm"],
-        }
-        client = ovn_utils.RemoteConn(node = node, container = sandbox["name"],
+        client = ovn_utils.RemoteConn(ssh = sandbox["ssh"], container = sandbox["name"],
                                       log = self.log)
         client.run(cmd = "ip link add veth0 type veth peer name veth1")
         client.run(cmd = "ip link add veth0 type veth peer name veth1")
@@ -116,10 +110,7 @@ class OvnWorkload:
             ovn_fake_path, node_net, node_net_len, node_ip, monitor_cmd, cluster_db_cmd,
             sandbox["name"], "tcp:0.0.0.1:6642"
         )
-        node = {
-            "ip": sandbox["farm"],
-        }
-        client = ovn_utils.RemoteConn(node = node, log = self.log)
+        client = ovn_utils.RemoteConn(ssh = sandbox["ssh"], log = self.log)
         client.run(cmd)
 
     def connect_chassis_node(self, fake_multinode_args = {}, iteration = 0):
@@ -138,10 +129,7 @@ class OvnWorkload:
         cmd = "cd {} && ./ovn_cluster.sh set-chassis-ovn-remote {} {}".format(
             ovn_fake_path, sandbox["name"], remote
         )
-        node = {
-            "ip": sandbox["farm"],
-        }
-        client = ovn_utils.RemoteConn(node = node, log = self.log)
+        client = ovn_utils.RemoteConn(ssh = sandbox["ssh"], log = self.log)
         client.run(cmd = cmd)
 
     def wait_chassis_node(self, fake_multinode_args = {}, iteration = 0,
@@ -158,10 +146,7 @@ class OvnWorkload:
 
     def ping_port(self, lport = None, sandbox = None, wait_timeout_s = 20):
         start_time = datetime.now()
-        node = {
-            "ip": sandbox["farm"],
-        }
-        client = ovn_utils.RemoteConn(node = node, container = sandbox["name"],
+        client = ovn_utils.RemoteConn(ssh = sandbox["ssh"], container = sandbox["name"],
                                       log = self.log)
         while True:
             try:
@@ -198,12 +183,9 @@ class OvnWorkload:
 
     def bind_and_wait_port(self, lport = None, lport_bind_args = {},
                            sandbox = None):
-        node = {
-            "ip": sandbox["farm"],
-        }
         internal = lport_bind_args.get("internal", False)
         internal_vm = lport_bind_args.get("internal_vm", True)
-        vsctl = ovn_utils.OvsVsctl(node = node, container = sandbox["name"],
+        vsctl = ovn_utils.OvsVsctl(ssh = sandbox["ssh"], container = sandbox["name"],
                                    log = self.log)
         # add ovs port
         vsctl.add_port(lport["name"], "br-int", internal = internal,

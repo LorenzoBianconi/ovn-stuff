@@ -40,7 +40,8 @@ def read_physical_deployment(deployment):
         config = yaml.safe_load(yaml_file)
 
         for worker in config['worker-nodes']:
-            farm_list.append(worker)
+            farm = { 'ip' : worker }
+            farm_list.append(farm)
 
         central_config = config['central-node']
         controller_args['ip'] = central_config['name']
@@ -106,19 +107,26 @@ def create_sandbox(sandbox_create_args = {}, iteration = 0):
                 message  % (start_cidr, amount))
 
     for i in range(amount):
+        farm = farm_list[ (i + iteration) % len(farm_list) ]
         sandbox = {
-                "farm": farm_list[ (i + iteration) % len(farm_list) ],
+                "farm" : farm['ip'],
+                "ssh" : farm['ssh'],
                 "name" : "ovn-scale-%s" % iteration
         }
         sandboxes.append(sandbox)
 
 def run_test():
+    # create ssh connections
+    for i in range(len(farm_list)):
+        farm = farm_list[i]
+        farm['ssh'] = ovn_utils.SSH(farm)
+
     # create sandox list
+    print("***** creating following sanboxes *****")
     for i in range(run_args['n_sandboxes']):
         create_sandbox(iteration = i)
-
-    print("***** creating following sanboxes *****")
-    print(yaml.dump(sandboxes))
+        sandbox = sandboxes[i]
+        print("name: " + sandbox['name'] + " farm: " + sandbox['farm'])
 
     # start ovn-northd on ovn central
     ovn = ovn_workload.OvnWorkload(controller_args, sandboxes,
