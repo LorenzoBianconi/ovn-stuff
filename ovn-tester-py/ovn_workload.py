@@ -163,8 +163,8 @@ class OvnWorkload:
                 pass
 
             if (datetime.now() - start_time).seconds > wait_timeout_s:
-                LOG.info("Timeout waiting for port {} to be able to ping gateway {}".format(
-                        lport["name"], dest))
+                print("***** Timeout waiting for port {} to be able to ping gateway {} *****".format(
+                      lport["name"], dest))
                 raise exceptions.ThreadTimeoutException()
 
     def wait_up_port(self, lport = None, sandbox = None, lport_bind_args = {}):
