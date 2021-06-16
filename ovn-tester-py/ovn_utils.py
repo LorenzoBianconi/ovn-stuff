@@ -2,19 +2,33 @@ import paramiko
 from io import StringIO
 
 class SSH:
-    def __init__(self, node = {}, container = None, log = False):
+    def __init__(self, node = {}):
         ip = node.get("ip", "127.0.0.1")
         username = node.get("user", "root")
         password = node.get("password", "")
         port = node.get("port", 22)
 
-        self.container = container
-        self.log = log
-
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh.connect(ip, username = username, password = password,
                          port = port)
+
+    def run(self, cmd = "", stdout = None):
+        ssh_stdin, ssh_stdout, ssh_stderr = self.ssh.exec_command(cmd)
+        exit_code = ssh_stdout.channel.recv_exit_status()
+
+        if stdout:
+            stdout.write(ssh_stdout.read().decode('ascii'))
+        else:
+            out = ssh_stdout.read().decode().strip()
+            if len(out):
+                print(out)
+
+class RemoteConn:
+    def __init__(self, node = {}, container = None, log = False):
+        self.ssh = SSH(node)
+        self.container = container
+        self.log = log
 
     def run(self, cmd = "", stdout = None):
         if self.container:
@@ -25,19 +39,11 @@ class SSH:
         if self.log:
             print(command)
 
-        ssh_stdin, ssh_stdout, ssh_stderr = self.ssh.exec_command(command)
-        exit_code = ssh_stdout.channel.recv_exit_status()
-
-        if stdout:
-            stdout.write(ssh_stdout.read().decode('ascii'))
-        else:
-            out = ssh_stdout.read().decode().strip()
-            if len(out):
-                print(out)
+        self.ssh.run(cmd = command, stdout = stdout)
 
 class OvsVsctl:
     def __init__(self, node = {}, container = None, log = False):
-        self.ssh = SSH(node = node, container = container, log = log)
+        self.ssh = RemoteConn(node = node, container = container, log = log)
 
     def run(self, cmd = "", prefix = "ovs-vsctl ", stdout = None):
         self.ssh.run(cmd = prefix + cmd, stdout = stdout)
@@ -72,7 +78,7 @@ class OvsVsctl:
 
 class OvnNbctl:
     def __init__(self, node = {}, container = None, log = False):
-        self.ssh = SSH(node = node, container = container, log = log)
+        self.ssh = RemoteConn(node = node, container = container, log = log)
         self.socket = ""
 
     def __del__(self):
@@ -191,7 +197,7 @@ class OvnNbctl:
 
 class OvnSbctl:
     def __init__(self, node = {}, container = None, log = False):
-        self.ssh = SSH(node = node, container = container, log = log)
+        self.ssh = RemoteConn(node = node, container = container, log = log)
 
     def run(self, cmd = "", stdout = None):
         self.ssh.run(cmd = "ovn-sbctl --no-leader-only " + cmd, stdout = stdout)
