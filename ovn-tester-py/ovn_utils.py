@@ -1,6 +1,12 @@
 import paramiko
 from io import StringIO
 
+class OvnInvalidConfigException(Exception):
+    pass
+
+class OvnPingTimeoutException(Exception):
+    pass
+
 class SSHError(Exception):
     pass
 

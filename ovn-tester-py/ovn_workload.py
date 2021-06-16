@@ -165,15 +165,15 @@ class OvnWorkload:
             if (datetime.now() - start_time).seconds > wait_timeout_s:
                 print("***** Timeout waiting for port {} to be able to ping gateway {} *****".format(
                       lport["name"], dest))
-                raise exceptions.ThreadTimeoutException()
+                raise ovn_utils.OvnPingTimeoutException()
 
     def wait_up_port(self, lport = None, sandbox = None, lport_bind_args = {}):
         wait_timeout_s = lport_bind_args.get("wait_timeout_s", 20)
         wait_sync = lport_bind_args.get("wait_sync", "hv")
         if wait_sync.lower() not in ['hv', 'sb', 'ping', 'none']:
-            raise exceptions.InvalidConfigException(_(
-                "Unknown value for wait_sync: %s. "
-                "Only 'hv', 'sb' and 'none' are allowed.") % wait_sync)
+            raise ovn_utils.OvnInvalidConfigException(
+                "Unknown value for wait_sync: {}. Only 'hv', 'sb' and 'none' are allowed.".format(
+                    wait_sync))
 
         print("***** wait port up: sync: {} *****".format(wait_sync))
 
