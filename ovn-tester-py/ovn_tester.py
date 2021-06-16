@@ -133,12 +133,9 @@ def run_test():
             ovn.add_chassis_node_localnet(fake_multinode_args, iteration = i)
             ovn.add_chassis_external_host(lnetwork_create_args, iteration = i)
 
-    for i in range(run_args['n_sandboxes']):
-        ovn.connect_chassis_node(fake_multinode_args, iteration = i)
-        ovn.wait_chassis_node(fake_multinode_args, iteration = i)
-
     # create ovn topology
-    ovn.create_routed_network(lswitch_create_args = lswitch_create_args,
+    ovn.create_routed_network(fake_multinode_args = fake_multinode_args,
+                              lswitch_create_args = lswitch_create_args,
                               lnetwork_create_args = lnetwork_create_args,
                               lport_bind_args = lport_bind_args)
     # create ovn logical ports

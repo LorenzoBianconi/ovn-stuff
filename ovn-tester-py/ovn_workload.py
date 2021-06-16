@@ -331,15 +331,20 @@ class OvnWorkload:
         self.nbctl.nat_add(gw_router["name"], external_ip = str(gr_gw),
                            logical_ip = cluster_cidr)
 
-    def create_routed_network(self, lswitch_create_args = {},
+    def create_routed_network(self, fake_multinode_args = {},
+                              lswitch_create_args = {},
                               lnetwork_create_args = {},
                               lport_bind_args = {}):
         # create logical router
         name = ''.join(random.choice(string.ascii_letters) for i in range(10))
         router = self.nbctl.lr_add("lrouter_" + name)
 
-        # create logical switches
+        # create ovn topology
         for i in range(lswitch_create_args.get("nlswitch", 10)):
+            # nlswitch == n_sandboxes
+            self.connect_chassis_node(fake_multinode_args, iteration = i)
+            self.wait_chassis_node(fake_multinode_args, iteration = i)
+
             lswitch = self.create_lswitch(
                     lswitch_create_args = lswitch_create_args,
                     iteration = i)
