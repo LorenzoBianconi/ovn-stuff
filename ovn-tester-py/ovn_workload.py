@@ -148,10 +148,15 @@ class OvnWorkload:
         start_time = datetime.now()
         client = ovn_utils.RemoteConn(ssh = sandbox["ssh"], container = sandbox["name"],
                                       log = self.log)
+
+        if lport.get("ext-gw"):
+            dest = lport["ext-gw"]
+        else:
+            dest = lport["gw"]
         while True:
             try:
                 cmd = "ip netns exec {} ping -q -c 1 -W 0.1 {}".format(
-                        lport["name"], lport["gw"])
+                        lport["name"], dest)
                 client.run(cmd = cmd)
                 break
             except:
@@ -159,7 +164,7 @@ class OvnWorkload:
 
             if (datetime.now() - start_time).seconds > wait_timeout_s:
                 LOG.info("Timeout waiting for port {} to be able to ping gateway {}".format(
-                        lport["name"], lport["gw"]))
+                        lport["name"], dest))
                 raise exceptions.ThreadTimeoutException()
 
     def wait_up_port(self, lport = None, sandbox = None, lport_bind_args = {}):
@@ -197,7 +202,7 @@ class OvnWorkload:
                               lport_bind_args = lport_bind_args)
 
     def create_lswitch_port(self, lswitch = None, lport_create_args = {},
-                            iteration = 0):
+                            iteration = 0, ext_cidr = None):
         cidr = lswitch.get("cidr", None)
         if cidr:
             ip = str(next(netaddr.iter_iprange(cidr.ip + iteration + 1,
@@ -210,11 +215,16 @@ class OvnWorkload:
             ip_mask = ""
             ip = ""
             gw = ""
+        if ext_cidr:
+            ext_gw = str(netaddr.IPAddress(ext_cidr.last - 2))
+        else:
+            ext_gw = ""
 
         print("***** creating lport {} *****".format(name))
         lswitch_port = self.nbctl.ls_port_add(lswitch["name"], name,
                                               mac = str(RandMac()),
-                                              ip = ip_mask, gw = gw)
+                                              ip = ip_mask, gw = gw,
+                                              ext_gw = ext_gw)
         return lswitch_port
 
     def create_lswitch(self, prefix = "lswitch_", lswitch_create_args = {},
@@ -249,6 +259,7 @@ class OvnWorkload:
         print("***** creating phynet {} *****".format(port))
 
         self.nbctl.ls_port_add(lswitch["name"], port, ip = "unknown")
+        self.nbctl.ls_port_set_set_type(port, "localnet")
         self.nbctl.ls_port_set_set_options(port, "network_name=%s" % physnet)
 
     def connect_gateway_router(self, lrouter = None, lswitch = None,
@@ -349,7 +360,7 @@ class OvnWorkload:
                                             gw_cidr = gw_cidr, ext_cidr = ext_cidr,
                                             sandbox = self.sandboxes[i])
 
-            lport = self.create_lswitch_port(lswitch, iteration = 0)
+            lport = self.create_lswitch_port(lswitch, iteration = 0, ext_cidr = ext_cidr)
             self.lports.append(lport)
             sandbox = self.sandboxes[i % len(self.sandboxes)]
             self.bind_and_wait_port(lport, lport_bind_args = lport_bind_args,

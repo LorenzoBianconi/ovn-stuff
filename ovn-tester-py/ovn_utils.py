@@ -104,7 +104,7 @@ class OvnNbctl:
         return { "name": name }
 
     def ls_port_add(self, lswitch = "", name = "", router_port = None,
-                    mac = "", ip = "", gw = ""):
+                    mac = "", ip = "", gw = "", ext_gw = ""):
         self.run(cmd = "lsp-add {} {}".format(lswitch, name))
         if router_port:
             cmd = "lsp-set-type {} router".format(name)
@@ -123,10 +123,13 @@ class OvnNbctl:
         cmd = "get logical_switch_port {} _uuid".format(name)
         self.run(cmd = cmd, stdout = stdout)
         uuid = stdout.getvalue()
-        return { "name" : name, "mac" : mac, "ip" : ip, "gw" : gw , "uuid" : uuid }
+        return { "name" : name, "mac" : mac, "ip" : ip, "gw" : gw, "ext-gw": ext_gw, "uuid" : uuid }
 
     def ls_port_set_set_options(self, name = "", options = ""):
         self.run("lsp-set-options {} {}".format(name, options))
+
+    def ls_port_set_set_type(self, name = "", lsp_type = ""):
+        self.run("lsp-set-type {} {}".format(name, lsp_type))
 
     def port_group_add(self, name = "", lport = None, create = True):
         if (create):
