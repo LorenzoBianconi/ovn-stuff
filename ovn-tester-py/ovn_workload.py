@@ -17,6 +17,9 @@ class OvnWorkload:
         self.nbctl = ovn_utils.OvnNbctl(controller,
                                         container = controller["name"],
                                         log = log)
+        self.sbctl = ovn_utils.OvnSbctl(controller,
+                                        container = self.controller["name"],
+                                        log = log)
         self.lswitches = []
         self.lports = []
         self.log = log
@@ -137,10 +140,7 @@ class OvnWorkload:
         sandbox = self.sandboxes[iteration % len(self.sandboxes)]
         max_timeout_s = fake_multinode_args.get("max_timeout_s")
         for i in range(0, max_timeout_s * 10):
-            sbctl = ovn_utils.OvnSbctl(self.controller,
-                                       container = self.controller["name"],
-                                       log = self.log)
-            if sbctl.chassis_bound(chassis = sandbox["name"]):
+            if self.sbctl.chassis_bound(chassis = sandbox["name"]):
                 break
             time.sleep(0.1)
 
